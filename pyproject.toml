@@ -3,7 +3,7 @@ name = "auralis-tts"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "auralis>=0.2.8.post2",
     "bs4>=0.0.2",
@@ -14,5 +14,8 @@ dependencies = [
     "pdfplumber>=0.11.5",
     "sudachidict-core>=20250129",
     "sudachipy>=0.6.10",
+    "torch>=2.5.1",
+    "torchaudio>=2.5.1",
+    "torchvision>=0.20.1",
     "unidic>=1.1.0",
 ]
