@@ -8,6 +8,9 @@ from bs4 import BeautifulSoup
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from yakinori import Yakinori
 import regex as re
+import numpy as np
+import jaconv
+import bunkai
 
 # Create a temporary directory to store short-named files
 tmp_dir = Path("/tmp/auralis")
@@ -23,7 +26,7 @@ def shorten_filename(original_path: str) -> str:
     return str(short_path)
 
 
-def extract_text_from_epub(epub_path: str, output_path=None):
+def extract_text_from_epub(epub_path: str, output_path=None) -> str:
     """
     Extracts text from an EPUB file and optionally saves it to a text file.
 
@@ -35,10 +38,10 @@ def extract_text_from_epub(epub_path: str, output_path=None):
         str: The extracted text
     """
     # Load the book
-    book = epub.read_epub(epub_path)
+    book: epub.EpubBook = epub.read_epub(epub_path)
 
     # List to hold extracted text
-    chapters = []
+    chapters: list[str] = []
 
     # Extract text from each chapter
     for item in book.get_items():
@@ -64,7 +67,7 @@ def extract_text_from_epub(epub_path: str, output_path=None):
             chapters.append(text)
 
     # Join all chapters
-    full_text = "\n\n".join(chapters)
+    full_text: str = "\n\n".join(chapters)
 
     # Save text if output path is specified
     if output_path:
@@ -105,16 +108,38 @@ def is_japanese(text) -> bool:
     return bool(re.search(hiragana, text) or re.search(katakana, text))
 
 
-def convert_kanji_to_kana(content: str) -> str:
+def preprocess_japanese_text(text: str):
+    alpha2kana = jaconv.alphabet2kana(text)
+    full_width_jp = jaconv.h2z(alpha2kana)
+    normalized_jp = jaconv.normalize(full_width_jp)
+
     yakinori = Yakinori()
-    sentence: str = content
-    parsed_list = yakinori.get_parsed_list(sentence)
-    hiragana: str = yakinori.get_hiragana_sentence(parsed_list, is_hatsuon=True)
-    return hiragana
+
+    splitter = bunkai.Bunkai()
+
+    sentences = splitter(normalized_jp)
+
+    final: str = ""
+
+    for sentence in sentences:
+        parsed_list = yakinori.get_parsed_list(sentence)
+        final += yakinori.get_hiragana_sentence(parsed_list, is_hatsuon=True)
+
+    return final
+
+
+def convert_audio(data: np.ndarray) -> np.ndarray:
+    """Convert any float format to proper 16-bit PCM"""
+    if data.dtype in [np.float16, np.float32, np.float64]:
+        # Normalize first to [-1, 1] range
+        data = data.astype(np.float32) / np.max(np.abs(data))
+        # Scale to 16-bit int range
+        data = (data * 32767).astype(np.int16)
+    return data
 
 
 def split_text_into_chunks(
-    text: str, chunk_size: int = 800, chunk_overlap: int = 10
+    text: str, chunk_size: int = 4000, chunk_overlap: int = 100
 ) -> list[str]:
     """
     Split text into chunks respecting byte limits and natural boundaries.
@@ -123,7 +148,7 @@ def split_text_into_chunks(
 
     text_to_process = text
 
-    japanese_separators: list[str] = [
+    text_separators: list[str] = [
         "\n\n",
         "\n",
         "。",
@@ -145,10 +170,10 @@ def split_text_into_chunks(
     ]
 
     if is_japanese(text_to_process):
-        text_to_process = convert_kanji_to_kana(text_to_process)
+        text_to_process = preprocess_japanese_text(text_to_process)
 
     splitter = RecursiveCharacterTextSplitter(
-        separators=japanese_separators,
+        separators=text_separators,
         chunk_size=chunk_size,  # Optimized for TTS context windows
         chunk_overlap=chunk_overlap,
         length_function=len,

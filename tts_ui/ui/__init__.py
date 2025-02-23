@@ -114,7 +114,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
             with gr.Row():
                 with gr.Column():
                     file_input = gr.File(
-                        label="Text / Ebook File", file_types=["text", ".md", ".epub"]
+                        label="Text / Ebook File", file_types=[".txt", ".md", ".epub"]
                     )
                     ref_audio_files_file = gr.Files(
                         label="Reference Audio Files", file_types=["audio"]

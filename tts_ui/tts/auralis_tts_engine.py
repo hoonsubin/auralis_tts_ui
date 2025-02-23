@@ -1,5 +1,4 @@
 import logging
-from typing import Generator
 from auralis import (
     TTS,
     TTSRequest,
@@ -14,6 +13,7 @@ from tts_ui.utils import (
     tmp_dir,
     extract_text_from_epub,
     text_from_file,
+    convert_audio,
 )
 from tts_ui.utils.doc_processor import DocumentProcessor
 import hashlib
@@ -23,7 +23,7 @@ from pathlib import Path
 
 # Loading the TTS engine first and assign it to the class.
 # This looks ugly, but it works
-logger: logging.Logger = setup_logger(__file__, logging.DEBUG)
+logger: logging.Logger = setup_logger(__file__)
 
 tts = TTS()
 model_path = "AstraMindAI/xttsv2"  # change this if you have a different model
@@ -46,12 +46,12 @@ except Exception as e:
 
 class AuralisTTSEngine:
     def __init__(self):
-        self.logger: Logger = logger
+        self.logger: logging.Logger = logger
         self.tts: TTS = tts
         self.model_path: str = model_path
         self.gpt_model: str = gpt_model
         self.tmp_dir: Path = tmp_dir
-        self.doc_processor: DocumentProcessor = DocumentProcessor
+        self.doc_processor = DocumentProcessor
 
     def process_text_and_generate(
         self,
@@ -75,7 +75,7 @@ class AuralisTTSEngine:
         input_size = calculate_byte_size(input_text)
 
         # use the chunking process if the text is too large
-        if input_size > 4000:
+        if input_size > 45000:
             self.logger.info(
                 f"Found {input_size} bytes of text. Switching to chunk mode."
             )
@@ -111,16 +111,18 @@ class AuralisTTSEngine:
                         language=language,
                     )
 
-                    output: Generator[TTSOutput, None, None] | TTSOutput = (
-                        self.tts.generate_speech(request)
-                    )
+                    output: TTSOutput = self.tts.generate_speech(request)
 
                     if output:
                         if speed != 1:
                             output.change_speed(speed)
                         log_messages += f"✅ Successfully Generated audio\n"
+                        self.logger.info(log_messages)
                         # return the sample rate and the audio file as a byte array
-                        return (output.sample_rate, output.array), log_messages
+                        return (
+                            output.sample_rate,
+                            convert_audio(output.array),
+                        ), log_messages
 
                     else:
                         log_messages += "❌ No output was generated. Check that the model was correctly loaded\n"
@@ -188,8 +190,12 @@ class AuralisTTSEngine:
             combined_output.change_speed(speed)
 
         log_messages += f"✅ Successfully Generated audio\n"
+        self.logger.info(log_messages)
         # return combined_output
-        return (combined_output.sample_rate, combined_output.array), log_messages
+        return (
+            combined_output.sample_rate,
+            convert_audio(combined_output.array),
+        ), log_messages
 
     def process_file_and_generate(
         self,
