@@ -18,3 +18,12 @@ uv pip install -e .
 
 uv run main.py
 ```
+
+I've tested this on Linux (Ubuntu) and WSL2.
+You may need to install system dependencies like `make` and `gcc`, to name a few.
+
+There are compatible issues with macOS (especially the M-chips) related to `triton` or `vllm`.
+You may have to build them from source or find a different workaround.
+I'll be working on a solution, but because the modern LLM development environment is quite primitive, there is a lot of workarounds required to make things work on other devices.
+
+Also note that if you're uploading a Japanese text, you want to run `python -m unidic download` from the project root.

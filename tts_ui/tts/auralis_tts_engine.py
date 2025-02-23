@@ -1,5 +1,5 @@
 from logging import Logger
-from typing import Generator, Optional
+from typing import Generator
 from auralis import (
     TTS,
     TTSRequest,
@@ -30,11 +30,7 @@ gpt_model = "AstraMindAI/xtts2-gpt"
 
 try:
     tts: TTS = tts.from_pretrained(
-        scheduler_max_concurrency=12,
-        model_name_or_path=model_path,
-        gpt_model=gpt_model,
-        device="cpu",
-        use_mps=True,
+        scheduler_max_concurrency=12, model_name_or_path=model_path, gpt_model=gpt_model
     )
     logger.info(f"Successfully loaded model {model_path}")
 except Exception as e:

@@ -5,9 +5,6 @@ from pathlib import Path
 import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
-from ebooklib import epub
-from bs4 import BeautifulSoup
-import os
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Create a temporary directory to store short-named files
@@ -24,7 +21,7 @@ def shorten_filename(original_path: str) -> str:
     return str(short_path)
 
 
-def extract_text_from_epub(epub_path, output_path=None):
+def extract_text_from_epub(epub_path: str, output_path=None):
     """
     Extracts text from an EPUB file and optionally saves it to a text file.
 
@@ -75,35 +72,7 @@ def extract_text_from_epub(epub_path, output_path=None):
     return full_text.replace("»", '"').replace("«", '"')
 
 
-def process_multiple_epubs(input_folder, output_folder):
-    """
-    Process all EPUB files in a folder.
-
-    Args:
-        input_folder (str): Folder containing EPUB files
-        output_folder (str): Folder where to save text files
-    """
-    # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    # Process each EPUB file in the folder
-    for filename in os.listdir(input_folder):
-        if filename.lower().endswith(".epub"):
-            input_path = os.path.join(input_folder, filename)
-            output_path = os.path.join(
-                output_folder, f"{os.path.splitext(filename)[0]}.txt"
-            )
-
-            try:
-                print(f"Processing: {filename}")
-                extract_text_from_epub(input_path, output_path)
-                print(f"Successfully processed: {filename}")
-            except Exception as e:
-                print(f"Error processing {filename}: {str(e)}")
-
-
-def text_from_file(txt_file_path) -> str:
+def text_from_file(txt_file_path: str) -> str:
     # Shorten filename before reading
     txt_short_path: str = shorten_filename(txt_file_path)
     with open(txt_short_path, "r") as f:
