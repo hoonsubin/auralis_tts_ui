@@ -1,6 +1,6 @@
 import gradio as gr
-from utils import *
-from tts.auralis_tts_engine import AuralisTTSEngine
+from tts_ui.utils import *
+from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
 
 
 def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:

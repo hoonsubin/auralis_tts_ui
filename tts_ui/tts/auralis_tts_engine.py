@@ -8,13 +8,13 @@ from auralis import (
 )
 from gradio import File, Files
 import torch
-from utils import (
+from tts_ui.utils import (
     split_text_into_chunks,
     temp_dir,
     extract_text_from_epub,
     text_from_file,
 )
-from utils.doc_processor import DocumentProcessor
+from tts_ui.utils.doc_processor import DocumentProcessor
 import hashlib
 import torchaudio
 import time

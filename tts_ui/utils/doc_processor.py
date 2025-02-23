@@ -1,7 +1,7 @@
 import markdown
 import pdfplumber
 from pathlib import Path
-from utils import split_text_into_chunks, extract_text_from_epub, text_from_file
+from tts_ui.utils import split_text_into_chunks, extract_text_from_epub, text_from_file
 
 
 class DocumentProcessor:
