@@ -6,17 +6,19 @@ import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from yakinori import Yakinori
+import regex as re
 
 # Create a temporary directory to store short-named files
-temp_dir = Path("/tmp/auralis")
-temp_dir.mkdir(exist_ok=True)
+tmp_dir = Path("/tmp/auralis")
+tmp_dir.mkdir(exist_ok=True)
 
 
 def shorten_filename(original_path: str) -> str:
     """Copies the given file to a temporary directory with a shorter, random filename."""
     ext: str = Path(original_path).suffix
     short_name: str = "file_" + uuid.uuid4().hex[:8] + ext
-    short_path: Path = temp_dir / short_name
+    short_path: Path = tmp_dir / short_name
     shutil.copyfile(original_path, short_path)
     return str(short_path)
 
@@ -94,10 +96,32 @@ def calculate_byte_size(text: str) -> int:
     return len(text.encode("utf-8"))
 
 
+def is_japanese(text) -> bool:
+    # Regex patterns for Hiragana, Katakana, and common Kanji/CJK unified blocks
+    hiragana = r"[\p{Hiragana}]"
+    katakana = r"[\p{Katakana}]"
+
+    # Check for Hiragana or Katakana (unique to Japanese)
+    return bool(re.search(hiragana, text) or re.search(katakana, text))
+
+
+def convert_kanji_to_kana(content: str) -> str:
+    yakinori = Yakinori()
+    sentence: str = content
+    parsed_list = yakinori.get_parsed_list(sentence)
+    hiragana: str = yakinori.get_hiragana_sentence(parsed_list, is_hatsuon=True)
+    return hiragana
+
+
 def split_text_into_chunks(
     text: str, chunk_size: int = 800, chunk_overlap: int = 10
 ) -> list[str]:
-    """Split text into chunks respecting byte limits and natural boundaries"""
+    """
+    Split text into chunks respecting byte limits and natural boundaries.
+    This function also automatically converts Japanese Kanji into Kana for better readability.
+    """
+
+    text_to_process = text
 
     japanese_separators: list[str] = [
         "\n\n",
@@ -119,6 +143,9 @@ def split_text_into_chunks(
         "\uff0e",
         "",
     ]
+
+    if is_japanese(text_to_process):
+        text_to_process = convert_kanji_to_kana(text_to_process)
 
     splitter = RecursiveCharacterTextSplitter(
         separators=japanese_separators,

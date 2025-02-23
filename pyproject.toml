@@ -18,4 +18,5 @@ dependencies = [
     "torchaudio>=2.5.1",
     "torchvision>=0.20.1",
     "unidic>=1.1.0",
+    "yakinori>=0.1.2",
 ]
