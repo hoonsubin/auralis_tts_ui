@@ -50,7 +50,7 @@ RUN pip install --upgrade pip setuptools wheel && \
     "cmake>=3.26" \
     packaging \
     ninja \
-    "setuptools-scm>=8"
+    "setuptools-scm>=8" --no-cache-dir
 
 # Install Base PyTorch System - For CPU-only
 RUN pip install \
@@ -61,7 +61,7 @@ RUN pip install \
   torchtext \
   datasets \
   transformers \
-  --extra-index-url https://download.pytorch.org/whl/cpu
+  --extra-index-url https://download.pytorch.org/whl/cpu --no-cache-dir
 
 # Install vLLM CPU version from source
 RUN git clone https://github.com/vllm-project/vllm.git \
@@ -73,7 +73,7 @@ RUN git clone https://github.com/vllm-project/vllm.git \
     && rm -rf vllm
 
 # Fix networkx compatibility
-RUN pip install --force-reinstall networkx==3.2.1
+RUN pip install --force-reinstall --no-cache-dir networkx==3.2.1
 
 # Install Python requirements with CPU-only constraints
 COPY requirements.txt .
