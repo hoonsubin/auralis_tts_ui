@@ -1,10 +1,4 @@
-import logging
-from auralis import (
-    TTS,
-    TTSRequest,
-    TTSOutput,
-    setup_logger,
-)
+from auralis import TTS, TTSRequest, TTSOutput, setup_logger
 from gradio import File, Files, Slider
 import torch
 from tts_ui.utils import (
@@ -23,7 +17,7 @@ from pathlib import Path
 
 # Loading the TTS engine first and assign it to the class.
 # This looks ugly, but it works
-logger: logging.Logger = setup_logger(__file__)
+logger = setup_logger(__file__)
 
 tts = TTS()
 model_path = "AstraMindAI/xttsv2"  # change this if you have a different model
@@ -46,7 +40,7 @@ except Exception as e:
 
 class AuralisTTSEngine:
     def __init__(self):
-        self.logger: logging.Logger = logger
+        self.logger = logger
         self.tts: TTS = tts
         self.model_path: str = model_path
         self.gpt_model: str = gpt_model
@@ -190,7 +184,6 @@ class AuralisTTSEngine:
             combined_output.change_speed(speed)
 
         log_messages += f"✅ Successfully Generated audio\n"
-        self.logger.info(log_messages)
         # return combined_output
         return (
             combined_output.sample_rate,

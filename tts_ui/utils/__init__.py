@@ -108,21 +108,20 @@ def is_japanese(text) -> bool:
     return bool(re.search(hiragana, text) or re.search(katakana, text))
 
 
-def preprocess_japanese_text(text: str):
-    alpha2kana = jaconv.alphabet2kana(text)
-    full_width_jp = jaconv.h2z(alpha2kana)
-    normalized_jp = jaconv.normalize(full_width_jp)
+def preprocess_japanese_text(text: str) -> str:
+    alpha2kana: str = jaconv.alphabet2kana(text)
+    normalized_jp: str = jaconv.normalize(alpha2kana)
 
     yakinori = Yakinori()
 
     splitter = bunkai.Bunkai()
 
-    sentences = splitter(normalized_jp)
+    sentences: np.Iterator[str] = splitter(normalized_jp)
 
     final: str = ""
 
     for sentence in sentences:
-        parsed_list = yakinori.get_parsed_list(sentence)
+        parsed_list: list[str] = yakinori.get_parsed_list(sentence)
         final += yakinori.get_hiragana_sentence(parsed_list, is_hatsuon=True)
 
     return final
@@ -139,7 +138,7 @@ def convert_audio(data: np.ndarray) -> np.ndarray:
 
 
 def split_text_into_chunks(
-    text: str, chunk_size: int = 4000, chunk_overlap: int = 100
+    text: str, chunk_size: int = 2000, chunk_overlap: int = 100
 ) -> list[str]:
     """
     Split text into chunks respecting byte limits and natural boundaries.

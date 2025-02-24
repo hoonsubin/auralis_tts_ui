@@ -12,18 +12,17 @@ class DocumentProcessor:
         # get the file extension from the path
         ext: str = file_path.name.split(".")[-1].lower()
 
-        # call the processor based on the file extension
-        processors = {
-            "pdf": self._process_pdf,
-            "epub": self._process_epub,
-            "md": self._process_markdown,
-            "txt": self._process_text,
-        }
-
-        if not ext:
-            raise Exception(f"No file found in {file_path}")
-
-        return processors[ext](file_path)
+        match ext:
+            case "pdf":
+                return self._process_pdf(file_path)
+            case "epub":
+                return self._process_epub(file_path)
+            case "md":
+                return self._process_markdown(file_path)
+            case "txt":
+                return self._process_text(file_path)
+            case _:
+                raise Exception(f"No file found in {file_path}")
 
     def _process_pdf(self, file_path: str) -> list[str]:
         text = ""
