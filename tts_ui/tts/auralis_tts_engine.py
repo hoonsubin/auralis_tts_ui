@@ -14,23 +14,31 @@ import hashlib
 import torchaudio
 import time
 from pathlib import Path
+import os
 
 # Loading the TTS engine first and assign it to the class.
 # This looks ugly, but it works
 logger = setup_logger(__file__)
 
-tts = TTS()
+tts: TTS = TTS()
 model_path = "AstraMindAI/xttsv2"  # change this if you have a different model
 gpt_model = "AstraMindAI/xtts2-gpt"
 
 try:
-    tts: TTS = tts.from_pretrained(
+    cuda_available: bool = torch.cuda.is_available()
+    if not cuda_available:
+        logger.warning("CUDA is not available for this platform")
+        os.environ["VLLM_NO_GPU"] = "1"
+        os.environ["TRITON_CPU_ONLY"] = "1"
+
+    tts = tts.from_pretrained(
         model_name_or_path=model_path,
         gpt_model=gpt_model,
         enforce_eager=False,
         max_seq_len_to_capture=4096,  # Match WSL2 page size
         scheduler_max_concurrency=4,
     )
+
     logger.info(f"Successfully loaded model {model_path}")
 except Exception as e:
     error_msg = f"Failed to load model: {e}."
