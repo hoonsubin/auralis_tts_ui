@@ -7,7 +7,9 @@ requires-python = ">=3.10"
 dependencies = [
     "auralis>=0.2.8.post2",
     "bs4>=0.0.2",
+    "bunkai>=1.5.7",
     "gradio>=5.17.1",
+    "jaconv>=0.4.0",
     "langchain-text-splitters>=0.3.6",
     "markdown>=3.7",
     "nest-asyncio>=1.6.0",
@@ -18,4 +20,5 @@ dependencies = [
     "torchaudio>=2.5.1",
     "torchvision>=0.20.1",
     "unidic>=1.1.0",
+    "yakinori>=0.1.2",
 ]

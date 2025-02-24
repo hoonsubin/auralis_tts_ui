@@ -3,9 +3,31 @@ from tts_ui.utils import *
 from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
 
 
+supported_langs: list[str] = [
+    "en",
+    "es",
+    "fr",
+    "de",
+    "it",
+    "pt",
+    "pl",
+    "tr",
+    "ru",
+    "nl",
+    "cs",
+    "ar",
+    "zh-cn",
+    "hu",
+    "ko",
+    "ja",
+    "hi",
+    "auto",
+]
+
+
 def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
     """Builds and launches the Gradio UI for Auralis."""
-    with gr.Blocks(title="Auralis TTS Demo", theme="soft") as ui:
+    with gr.Blocks(title="Auralis TTS UI", theme="soft") as ui:
 
         gr.Markdown(
             """
@@ -13,7 +35,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
           
           Convert text to speech with advanced voice cloning and enhancement.
 
-          Powered by Auralis 🌌
+          Powered by Auralis 🌌 made by Hoon
           """
         )
 
@@ -64,12 +86,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                         language = gr.Dropdown(
                             label="Target Language",
-                            choices=[
-                                "en",
-                                "ko",
-                                "ja",
-                                "auto",
-                            ],
+                            choices=supported_langs,
                             value="auto",
                         )
                     generate_button = gr.Button("Generate Speech")
@@ -97,7 +114,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
             with gr.Row():
                 with gr.Column():
                     file_input = gr.File(
-                        label="Text / Ebook File", file_types=["text", ".md", ".epub"]
+                        label="Text / Ebook File", file_types=[".txt", ".md", ".epub"]
                     )
                     ref_audio_files_file = gr.Files(
                         label="Reference Audio Files", file_types=["audio"]
@@ -139,26 +156,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                         language_file = gr.Dropdown(
                             label="Target Language",
-                            choices=[
-                                "en",
-                                "es",
-                                "fr",
-                                "de",
-                                "it",
-                                "pt",
-                                "pl",
-                                "tr",
-                                "ru",
-                                "nl",
-                                "cs",
-                                "ar",
-                                "zh-cn",
-                                "hu",
-                                "ko",
-                                "ja",
-                                "hi",
-                                "auto",
-                            ],
+                            choices=supported_langs,
                             value="auto",
                         )
                     generate_button_file = gr.Button("Generate Speech from File")
@@ -230,26 +228,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                         language_mic = gr.Dropdown(
                             label="Target Language",
-                            choices=[
-                                "en",
-                                "es",
-                                "fr",
-                                "de",
-                                "it",
-                                "pt",
-                                "pl",
-                                "tr",
-                                "ru",
-                                "nl",
-                                "cs",
-                                "ar",
-                                "zh-cn",
-                                "hu",
-                                "ko",
-                                "ja",
-                                "hi",
-                                "auto",
-                            ],
+                            choices=supported_langs,
                             value="auto",
                         )
                     generate_button_mic = gr.Button("Generate Speech")

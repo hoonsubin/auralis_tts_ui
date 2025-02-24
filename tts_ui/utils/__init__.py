@@ -6,22 +6,27 @@ import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from yakinori import Yakinori
+import regex as re
+import numpy as np
+import jaconv
+import bunkai
 
 # Create a temporary directory to store short-named files
-temp_dir = Path("/tmp/auralis")
-temp_dir.mkdir(exist_ok=True)
+tmp_dir = Path("/tmp/auralis")
+tmp_dir.mkdir(exist_ok=True)
 
 
 def shorten_filename(original_path: str) -> str:
     """Copies the given file to a temporary directory with a shorter, random filename."""
     ext: str = Path(original_path).suffix
     short_name: str = "file_" + uuid.uuid4().hex[:8] + ext
-    short_path: Path = temp_dir / short_name
+    short_path: Path = tmp_dir / short_name
     shutil.copyfile(original_path, short_path)
     return str(short_path)
 
 
-def extract_text_from_epub(epub_path: str, output_path=None):
+def extract_text_from_epub(epub_path: str, output_path=None) -> str:
     """
     Extracts text from an EPUB file and optionally saves it to a text file.
 
@@ -33,10 +38,10 @@ def extract_text_from_epub(epub_path: str, output_path=None):
         str: The extracted text
     """
     # Load the book
-    book = epub.read_epub(epub_path)
+    book: epub.EpubBook = epub.read_epub(epub_path)
 
     # List to hold extracted text
-    chapters = []
+    chapters: list[str] = []
 
     # Extract text from each chapter
     for item in book.get_items():
@@ -62,7 +67,7 @@ def extract_text_from_epub(epub_path: str, output_path=None):
             chapters.append(text)
 
     # Join all chapters
-    full_text = "\n\n".join(chapters)
+    full_text: str = "\n\n".join(chapters)
 
     # Save text if output path is specified
     if output_path:
@@ -94,12 +99,55 @@ def calculate_byte_size(text: str) -> int:
     return len(text.encode("utf-8"))
 
 
-def split_text_into_chunks(
-    text: str, chunk_size: int = 800, chunk_overlap: int = 10
-) -> list[str]:
-    """Split text into chunks respecting byte limits and natural boundaries"""
+def is_japanese(text) -> bool:
+    # Regex patterns for Hiragana, Katakana, and common Kanji/CJK unified blocks
+    hiragana = r"[\p{Hiragana}]"
+    katakana = r"[\p{Katakana}]"
 
-    japanese_separators: list[str] = [
+    # Check for Hiragana or Katakana (unique to Japanese)
+    return bool(re.search(hiragana, text) or re.search(katakana, text))
+
+
+def preprocess_japanese_text(text: str) -> str:
+    alpha2kana: str = jaconv.alphabet2kana(text)
+    normalized_jp: str = jaconv.normalize(alpha2kana)
+
+    yakinori = Yakinori()
+
+    splitter = bunkai.Bunkai()
+
+    sentences: np.Iterator[str] = splitter(normalized_jp)
+
+    final: str = ""
+
+    for sentence in sentences:
+        parsed_list: list[str] = yakinori.get_parsed_list(sentence)
+        final += yakinori.get_hiragana_sentence(parsed_list, is_hatsuon=True)
+
+    return final
+
+
+def convert_audio(data: np.ndarray) -> np.ndarray:
+    """Convert any float format to proper 16-bit PCM"""
+    if data.dtype in [np.float16, np.float32, np.float64]:
+        # Normalize first to [-1, 1] range
+        data = data.astype(np.float32) / np.max(np.abs(data))
+        # Scale to 16-bit int range
+        data = (data * 32767).astype(np.int16)
+    return data
+
+
+def split_text_into_chunks(
+    text: str, chunk_size: int = 2000, chunk_overlap: int = 100
+) -> list[str]:
+    """
+    Split text into chunks respecting byte limits and natural boundaries.
+    This function also automatically converts Japanese Kanji into Kana for better readability.
+    """
+
+    text_to_process = text
+
+    text_separators: list[str] = [
         "\n\n",
         "\n",
         "。",
@@ -120,8 +168,11 @@ def split_text_into_chunks(
         "",
     ]
 
+    if is_japanese(text_to_process):
+        text_to_process = preprocess_japanese_text(text_to_process)
+
     splitter = RecursiveCharacterTextSplitter(
-        separators=japanese_separators,
+        separators=text_separators,
         chunk_size=chunk_size,  # Optimized for TTS context windows
         chunk_overlap=chunk_overlap,
         length_function=len,
