@@ -16,7 +16,7 @@ uv sync
 
 uv pip install -e .
 
-uv run main.py
+uv run app.py
 ```
 
 I've tested this on Linux (Ubuntu) and WSL2.
