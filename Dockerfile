@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.10-bookworm-slim
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu24.04
 
 WORKDIR /app
 
@@ -43,6 +43,10 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Verify installation
 RUN rustc --version && cargo --version
+
+ADD https://astral.sh/uv/install.sh /uv-installer.sh  
+RUN sh /uv-installer.sh && rm /uv-installer.sh  
+ENV PATH="/root/.local/bin/:$PATH"  
 
 COPY pyproject.toml .
 COPY uv.lock .
