@@ -138,7 +138,7 @@ def convert_audio(data: np.ndarray) -> np.ndarray:
 
 
 def split_text_into_chunks(
-    text: str, chunk_size: int = 2000, chunk_overlap: int = 100
+    text: str, chunk_size: int = 2000, chunk_overlap: int = 10
 ) -> list[str]:
     """
     Split text into chunks respecting byte limits and natural boundaries.

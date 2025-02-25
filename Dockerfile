@@ -1,12 +1,12 @@
-FROM python:3.10-slim
+FROM ghcr.io/astral-sh/uv:python3.10-bookworm-slim
 
 WORKDIR /app
 
 # Environment variables for CPU-only operation
-ENV CUDA_VISIBLE_DEVICES=-1 \
-    TF_CPP_MIN_LOG_LEVEL=3 \
-    SDL_AUDIODRIVER=disk \
-    VLLM_TARGET_DEVICE=cpu
+# ENV CUDA_VISIBLE_DEVICES=-1 \
+#     TF_CPP_MIN_LOG_LEVEL=3 \
+#     SDL_AUDIODRIVER=disk \
+#     VLLM_TARGET_DEVICE=cpu
 
 # Install system dependencies (probably more than needed)
 RUN apt-get update && apt-get install -y \
@@ -44,16 +44,43 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Verify installation
 RUN rustc --version && cargo --version
 
+COPY pyproject.toml .
+COPY uv.lock .
+RUN uv venv
+
+# Set the virtual environment
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Update pip and install base requirements (CPU-only)
+# RUN uv pip install --upgrade pip setuptools wheel && \
+#     uv pip install numpy \
+#     "cmake>=3.26" \
+#     packaging \
+#     ninja \
+#     "setuptools-scm>=8" --no-cache-dir
+
 # Update pip and install base requirements
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install numpy \
+RUN uv pip install --upgrade pip setuptools wheel && \
+    uv pip install numpy \
     "cmake>=3.26" \
     packaging \
     ninja \
+    vllm \
     "setuptools-scm>=8" --no-cache-dir
 
 # Install Base PyTorch System - For CPU-only
-RUN pip install \
+# RUN pip install \
+#   torch \
+#   torchvision \
+#   torchaudio \
+#   torchdatasets \
+#   torchtext \
+#   datasets \
+#   transformers \
+#   --extra-index-url https://download.pytorch.org/whl/cpu --no-cache-dir
+
+  RUN uv pip install \
   torch \
   torchvision \
   torchaudio \
@@ -61,23 +88,24 @@ RUN pip install \
   torchtext \
   datasets \
   transformers \
-  --extra-index-url https://download.pytorch.org/whl/cpu --no-cache-dir
+  --extra-index-url https://download.pytorch.org/whl --no-cache-dir
 
 # Install vLLM CPU version from source
-RUN git clone https://github.com/vllm-project/vllm.git \
-    && cd vllm \
-    && pip install -v -r requirements-cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu \
-    && python setup.py install \
-    && pip install --no-cache-dir -e . \
-    && cd .. \
-    && rm -rf vllm
+# RUN git clone https://github.com/vllm-project/vllm.git \
+#     && cd vllm \
+#     && pip install -v -r requirements-cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu \
+#     && python setup.py install \
+#     && pip install --no-cache-dir -e . \
+#     && cd .. \
+#     && rm -rf vllm
 
 # Fix networkx compatibility
-RUN pip install --force-reinstall --no-cache-dir networkx==3.2.1
+RUN uv pip install --force-reinstall --no-cache-dir networkx==3.2.1
 
 # Install Python requirements with CPU-only constraints
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt --no-deps
+# COPY requirements.txt .
+
+RUN uv sync --frozen
 
 # Install unidic for processing Japanese texts
 RUN python -m unidic download
@@ -86,4 +114,4 @@ RUN python -m unidic download
 COPY . .
 
 EXPOSE 7860
-CMD ["python", "app.py"]
+CMD ["uv", "run", "app.py"]

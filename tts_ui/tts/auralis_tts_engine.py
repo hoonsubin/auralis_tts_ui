@@ -30,6 +30,8 @@ try:
         logger.warning("CUDA is not available for this platform")
         os.environ["VLLM_NO_GPU"] = "1"
         os.environ["TRITON_CPU_ONLY"] = "1"
+    else:
+        logger.info("CUDA is available for this platform")
 
     tts = tts.from_pretrained(
         model_name_or_path=model_path,
