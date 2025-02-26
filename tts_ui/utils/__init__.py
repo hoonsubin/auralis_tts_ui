@@ -109,8 +109,8 @@ def is_japanese(text) -> bool:
 
 
 def preprocess_japanese_text(text: str) -> str:
-    alpha2kana: str = jaconv.alphabet2kana(text)
-    normalized_jp: str = jaconv.normalize(alpha2kana)
+    normalized_jp: str = jaconv.normalize(text)
+    alpha2kana: str = jaconv.alphabet2kana(normalized_jp)
 
     yakinori = Yakinori()
 
@@ -138,7 +138,7 @@ def convert_audio(data: np.ndarray) -> np.ndarray:
 
 
 def split_text_into_chunks(
-    text: str, chunk_size: int = 2000, chunk_overlap: int = 10
+    text: str, chunk_size: int = 1000, chunk_overlap: int = 10
 ) -> list[str]:
     """
     Split text into chunks respecting byte limits and natural boundaries.
@@ -171,6 +171,7 @@ def split_text_into_chunks(
     if is_japanese(text_to_process):
         text_to_process = preprocess_japanese_text(text_to_process)
 
+    # todo: optimize this function so it stores batches locally in the temp folder instead of loading everything in memory
     splitter = RecursiveCharacterTextSplitter(
         separators=text_separators,
         chunk_size=chunk_size,  # Optimized for TTS context windows

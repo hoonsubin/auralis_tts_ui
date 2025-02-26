@@ -37,8 +37,7 @@ try:
         model_name_or_path=model_path,
         gpt_model=gpt_model,
         enforce_eager=False,
-        max_seq_len_to_capture=4096,  # Match WSL2 page size
-        scheduler_max_concurrency=4,
+        max_concurrency=4,
     )
 
     logger.info(f"Successfully loaded model {model_path}")
