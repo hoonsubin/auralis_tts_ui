@@ -47,6 +47,7 @@ except Exception as e:
     raise Exception(error_msg)
 
 
+# Todo: inherit from the base engine <https://github.com/astramind-ai/Auralis/blob/main/docs/api/core/base.md>
 class AuralisTTSEngine:
     def __init__(self):
         self.logger = logger
@@ -54,7 +55,7 @@ class AuralisTTSEngine:
         self.model_path: str = model_path
         self.gpt_model: str = gpt_model
         self.tmp_dir: Path = tmp_dir
-        self.doc_processor = DocumentProcessor
+        self.doc_processor = DocumentProcessor()
 
     def process_text_and_generate(
         self,
@@ -84,15 +85,15 @@ class AuralisTTSEngine:
             )
             # todo: this function has a couple of overlapping functions as normal processing. I need to optimize the code
             return self._process_large_text(
-                input_text,
-                ref_audio_files,
-                speed,
-                enhance_speech,
-                temperature,
-                top_p,
-                top_k,
-                repetition_penalty,
-                language,
+                input_full_text=input_text,
+                ref_audio_files=ref_audio_files,
+                speed=speed,
+                enhance_speech=enhance_speech,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                repetition_penalty=repetition_penalty,
+                language=language,
             )
         else:
             try:
@@ -119,7 +120,7 @@ class AuralisTTSEngine:
                     if output:
                         if speed != 1:
                             output.change_speed(speed)
-                        log_messages += f"✅ Successfully Generated audio\n"
+                        log_messages += "✅ Successfully Generated audio\n"
                         self.logger.info(log_messages)
                         # return the sample rate and the audio file as a byte array
                         return (
@@ -160,6 +161,7 @@ class AuralisTTSEngine:
         print(f"Created {len(chunks)} chunks")
 
         audio_segments: list[TTSOutput] = []
+        # todo: refactor this to use batch
         for idx, chunk in enumerate(chunks):
             request = TTSRequest(
                 text=chunk,
@@ -192,7 +194,7 @@ class AuralisTTSEngine:
         if speed != 1:
             combined_output.change_speed(speed)
 
-        log_messages += f"✅ Successfully Generated audio\n"
+        log_messages += "✅ Successfully Generated audio\n"
         # return combined_output
         return (
             combined_output.sample_rate,

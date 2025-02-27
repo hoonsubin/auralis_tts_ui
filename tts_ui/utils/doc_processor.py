@@ -22,10 +22,10 @@ class DocumentProcessor:
             case "txt":
                 return self._process_text(file_path)
             case _:
-                raise Exception(f"No file found in {file_path}")
+                raise Exception(f"File {file_path} is not supported")
 
     def _process_pdf(self, file_path: str) -> list[str]:
-        text = ""
+        text: str = ""
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
                 text += page.extract_text() + "\n"

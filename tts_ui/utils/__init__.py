@@ -116,7 +116,7 @@ def preprocess_japanese_text(text: str) -> str:
 
     splitter = bunkai.Bunkai()
 
-    sentences: np.Iterator[str] = splitter(normalized_jp)
+    sentences: np.Iterator[str] = splitter(alpha2kana)
 
     final: str = ""
 
@@ -172,6 +172,7 @@ def split_text_into_chunks(
         text_to_process = preprocess_japanese_text(text_to_process)
 
     # todo: optimize this function so it stores batches locally in the temp folder instead of loading everything in memory
+    # todo: implement a tokenized context batch size manager using https://huggingface.co/AstraMindAI/xtts2-gpt/blob/main/tokenizer.py
     splitter = RecursiveCharacterTextSplitter(
         separators=text_separators,
         chunk_size=chunk_size,  # Optimized for TTS context windows

@@ -1,10 +1,12 @@
 import gradio as gr
-from tts_ui.utils import *
 from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
 
 
 supported_langs: list[str] = [
+    "auto",
     "en",
+    "ko",
+    "ja",
     "es",
     "fr",
     "de",
@@ -18,10 +20,7 @@ supported_langs: list[str] = [
     "ar",
     "zh-cn",
     "hu",
-    "ko",
-    "ja",
     "hi",
-    "auto",
 ]
 
 default_values: dict[str, float] = {
@@ -36,7 +35,6 @@ default_values: dict[str, float] = {
 def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
     """Builds and launches the Gradio UI for Auralis."""
     with gr.Blocks(title="GPT-TTS UI - Clone any voice", theme="soft") as ui:
-
         gr.Markdown(
             """
           # Text-to-Speech Interface
