@@ -14,23 +14,32 @@ import hashlib
 import torchaudio
 import time
 from pathlib import Path
+import os
 
 # Loading the TTS engine first and assign it to the class.
 # This looks ugly, but it works
 logger = setup_logger(__file__)
 
-tts = TTS()
+tts: TTS = TTS()
 model_path = "AstraMindAI/xttsv2"  # change this if you have a different model
 gpt_model = "AstraMindAI/xtts2-gpt"
 
 try:
-    tts: TTS = tts.from_pretrained(
+    cuda_available: bool = torch.cuda.is_available()
+    if not cuda_available:
+        logger.warning("CUDA is not available for this platform")
+        os.environ["VLLM_NO_GPU"] = "1"
+        os.environ["TRITON_CPU_ONLY"] = "1"
+    else:
+        logger.info("CUDA is available for this platform")
+
+    tts = tts.from_pretrained(
         model_name_or_path=model_path,
         gpt_model=gpt_model,
         enforce_eager=False,
-        max_seq_len_to_capture=4096,  # Match WSL2 page size
-        scheduler_max_concurrency=4,
+        max_concurrency=4,
     )
+
     logger.info(f"Successfully loaded model {model_path}")
 except Exception as e:
     error_msg = f"Failed to load model: {e}."
@@ -38,6 +47,7 @@ except Exception as e:
     raise Exception(error_msg)
 
 
+# Todo: inherit from the base engine <https://github.com/astramind-ai/Auralis/blob/main/docs/api/core/base.md>
 class AuralisTTSEngine:
     def __init__(self):
         self.logger = logger
@@ -45,7 +55,7 @@ class AuralisTTSEngine:
         self.model_path: str = model_path
         self.gpt_model: str = gpt_model
         self.tmp_dir: Path = tmp_dir
-        self.doc_processor = DocumentProcessor
+        self.doc_processor = DocumentProcessor()
 
     def process_text_and_generate(
         self,
@@ -75,15 +85,15 @@ class AuralisTTSEngine:
             )
             # todo: this function has a couple of overlapping functions as normal processing. I need to optimize the code
             return self._process_large_text(
-                input_text,
-                ref_audio_files,
-                speed,
-                enhance_speech,
-                temperature,
-                top_p,
-                top_k,
-                repetition_penalty,
-                language,
+                input_full_text=input_text,
+                ref_audio_files=ref_audio_files,
+                speed=speed,
+                enhance_speech=enhance_speech,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                repetition_penalty=repetition_penalty,
+                language=language,
             )
         else:
             try:
@@ -110,7 +120,7 @@ class AuralisTTSEngine:
                     if output:
                         if speed != 1:
                             output.change_speed(speed)
-                        log_messages += f"✅ Successfully Generated audio\n"
+                        log_messages += "✅ Successfully Generated audio\n"
                         self.logger.info(log_messages)
                         # return the sample rate and the audio file as a byte array
                         return (
@@ -148,9 +158,10 @@ class AuralisTTSEngine:
         base64_voices: str | list[str] | bytes | list[bytes] = ref_audio_files[:5]
 
         chunks: list[str] = split_text_into_chunks(input_full_text)
-        print(f"Created {len(chunks)} chunks")
+        print(f"\nCreated {len(chunks)} chunks")
 
         audio_segments: list[TTSOutput] = []
+        # todo: refactor this to use batch
         for idx, chunk in enumerate(chunks):
             request = TTSRequest(
                 text=chunk,
@@ -166,6 +177,7 @@ class AuralisTTSEngine:
 
             try:
                 with torch.no_grad():
+                    self.logger.info(f"Processing {chunk}")
                     audio = self.tts.generate_speech(request)
                     audio_segments.append(audio)
                     self.logger.info(f"Processed {idx + 1} chunks out of {len(chunks)}")
@@ -183,7 +195,7 @@ class AuralisTTSEngine:
         if speed != 1:
             combined_output.change_speed(speed)
 
-        log_messages += f"✅ Successfully Generated audio\n"
+        log_messages += "✅ Successfully Generated audio\n"
         # return combined_output
         return (
             combined_output.sample_rate,

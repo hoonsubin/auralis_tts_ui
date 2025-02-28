@@ -1,4 +1,5 @@
 import base64
+from typing import List
 import uuid
 import shutil
 from pathlib import Path
@@ -109,22 +110,34 @@ def is_japanese(text) -> bool:
 
 
 def preprocess_japanese_text(text: str) -> str:
-    alpha2kana: str = jaconv.alphabet2kana(text)
-    normalized_jp: str = jaconv.normalize(alpha2kana)
+    removed_special_char = (
+        text.replace("♡", "")
+        .replace("゛", "")
+        .replace("\n─", "")
+        .replace("―", "")
+        .replace("─", "")
+    )
+    normalized_jp: str = jaconv.normalize(removed_special_char)
+    alpha2kana: str = jaconv.alphabet2kana(normalized_jp)
 
-    yakinori = Yakinori()
+    # yakinori = Yakinori()
 
-    splitter = bunkai.Bunkai()
+    # splitter = bunkai.Bunkai()
 
-    sentences: np.Iterator[str] = splitter(normalized_jp)
+    # sentences: np.Iterator[str] = splitter(normalized_jp)
 
-    final: str = ""
+    # final: str = ""
 
-    for sentence in sentences:
-        parsed_list: list[str] = yakinori.get_parsed_list(sentence)
-        final += yakinori.get_hiragana_sentence(parsed_list, is_hatsuon=True)
+    # for sentence in sentences:
+    #     parsed_list: list[str] = yakinori.get_parsed_list(sentence)
+    #     hiragana: str = yakinori.get_hiragana_sentence(parsed_list, is_hatsuon=True)
+    #     final += hiragana
 
-    return final
+    return alpha2kana
+
+
+def remove_empty_item(dirty_list: list):
+    return list(filter(None, dirty_list))
 
 
 def convert_audio(data: np.ndarray) -> np.ndarray:
@@ -138,14 +151,17 @@ def convert_audio(data: np.ndarray) -> np.ndarray:
 
 
 def split_text_into_chunks(
-    text: str, chunk_size: int = 2000, chunk_overlap: int = 100
+    text: str, chunk_size: int = 608, chunk_overlap: int = 5
 ) -> list[str]:
     """
     Split text into chunks respecting byte limits and natural boundaries.
     This function also automatically converts Japanese Kanji into Kana for better readability.
     """
 
-    text_to_process = text
+    text_to_process: str = text
+
+    if is_japanese(text_to_process):
+        text_to_process = preprocess_japanese_text(text_to_process)
 
     text_separators: list[str] = [
         "\n\n",
@@ -168,9 +184,8 @@ def split_text_into_chunks(
         "",
     ]
 
-    if is_japanese(text_to_process):
-        text_to_process = preprocess_japanese_text(text_to_process)
-
+    # todo: optimize this function so it stores batches locally in the temp folder instead of loading everything in memory
+    # todo: implement a tokenized context batch size manager using https://huggingface.co/AstraMindAI/xtts2-gpt/blob/main/tokenizer.py
     splitter = RecursiveCharacterTextSplitter(
         separators=text_separators,
         chunk_size=chunk_size,  # Optimized for TTS context windows
@@ -179,4 +194,43 @@ def split_text_into_chunks(
         is_separator_regex=False,
     )
 
-    return splitter.split_text(text)
+    optimized_list: list[str] = []
+
+    split_chunks: list[str] = splitter.split_text(text_to_process)
+
+    splitter = bunkai.Bunkai()
+
+    for current_text in split_chunks:
+        # add the text if it's shorter than the max chunk size
+        if len(current_text) <= chunk_size:
+            optimized_list.append(current_text)
+        else:
+            local_chunk: list[str] = []
+            print(f"Found a large chunk: {current_text}")
+            # further split the chunk
+            if is_japanese(current_text):
+                for local_batch in splitter(current_text):
+                    local_chunk.append(local_batch)
+            else:
+                for local_batch in remove_empty_item(
+                    current_text.split("\n", chunk_overlap)
+                ):
+                    local_chunk.append(local_batch)
+
+            optimized_list.extend(local_chunk)
+
+    # great quality, but too slow
+    # optimized_list: list[str] = []
+
+    # for current_text in chunks:
+    #     # add the text if it's shorter than the max chunk size
+    #     if len(current_text) <= chunk_size:
+    #         optimized_list.append(current_text)
+    #     else:
+    #         local_chunk = []
+    #         # further split the chunk
+    #         for local_batch in splitter.split_text(text_to_process):
+    #             local_chunk.append(local_batch)
+    #         optimized_list.extend(local_chunk)
+
+    return optimized_list
