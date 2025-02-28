@@ -1,5 +1,4 @@
 import base64
-from typing import List
 import uuid
 import shutil
 from pathlib import Path
@@ -111,11 +110,7 @@ def is_japanese(text) -> bool:
 
 def preprocess_japanese_text(text: str) -> str:
     removed_special_char = (
-        text.replace("♡", "")
-        .replace("゛", "")
-        .replace("\n─", "")
-        .replace("―", "")
-        .replace("─", "")
+        text.replace("♡", "").replace("゛", "").replace("\n─", "").replace("―", "")
     )
     normalized_jp: str = jaconv.normalize(removed_special_char)
     alpha2kana: str = jaconv.alphabet2kana(normalized_jp)
@@ -136,10 +131,6 @@ def preprocess_japanese_text(text: str) -> str:
     return alpha2kana
 
 
-def remove_empty_item(dirty_list: list):
-    return list(filter(None, dirty_list))
-
-
 def convert_audio(data: np.ndarray) -> np.ndarray:
     """Convert any float format to proper 16-bit PCM"""
     if data.dtype in [np.float16, np.float32, np.float64]:
@@ -151,17 +142,14 @@ def convert_audio(data: np.ndarray) -> np.ndarray:
 
 
 def split_text_into_chunks(
-    text: str, chunk_size: int = 608, chunk_overlap: int = 5
+    text: str, chunk_size: int = 900, chunk_overlap: int = 5
 ) -> list[str]:
     """
     Split text into chunks respecting byte limits and natural boundaries.
     This function also automatically converts Japanese Kanji into Kana for better readability.
     """
 
-    text_to_process: str = text
-
-    if is_japanese(text_to_process):
-        text_to_process = preprocess_japanese_text(text_to_process)
+    text_to_process = text
 
     text_separators: list[str] = [
         "\n\n",
@@ -194,43 +182,77 @@ def split_text_into_chunks(
         is_separator_regex=False,
     )
 
-    optimized_list: list[str] = []
+    return splitter.split_text(text_to_process)
 
-    split_chunks: list[str] = splitter.split_text(text_to_process)
 
-    splitter = bunkai.Bunkai()
+def remove_empty_item(dirty_list: list):
+    return list(filter(None, dirty_list))
 
-    for current_text in split_chunks:
-        # add the text if it's shorter than the max chunk size
-        if len(current_text) <= chunk_size:
-            optimized_list.append(current_text)
-        else:
-            local_chunk: list[str] = []
-            print(f"Found a large chunk: {current_text}")
-            # further split the chunk
-            if is_japanese(current_text):
-                for local_batch in splitter(current_text):
-                    local_chunk.append(local_batch)
-            else:
-                for local_batch in remove_empty_item(
-                    current_text.split("\n", chunk_overlap)
-                ):
-                    local_chunk.append(local_batch)
 
-            optimized_list.extend(local_chunk)
+data = """
+――ぶびゅっ！♡♡♡
+びゅるるるるるるっ！！！♡♡♡♡　ぶびゅっ！！！♡♡♡♡　ドクッ！♡♡　ドクンッ！♡♡♡　ぶびゅうぅぅぅぅ～～～～～～～～～～っ！！！♡♡♡♡♡　びゅるるるるるるっ！！！！♡♡♡　ドビュッ！！！♡♡♡　びゅるるるるる～～～～～～～～～～ッ♡♡♡♡♡♡♡
 
-    # great quality, but too slow
-    # optimized_list: list[str] = []
 
-    # for current_text in chunks:
-    #     # add the text if it's shorter than the max chunk size
-    #     if len(current_text) <= chunk_size:
-    #         optimized_list.append(current_text)
-    #     else:
-    #         local_chunk = []
-    #         # further split the chunk
-    #         for local_batch in splitter.split_text(text_to_process):
-    #             local_chunk.append(local_batch)
-    #         optimized_list.extend(local_chunk)
+「ぉ゛っ……おおぉ゛ぉおぉぉ゛……っ♡♡　……♡♡♡♡　んぶっ……チュッ♡♡　チュ♡♡　ん゛ぅ～～～～……♡♡♡♡♡♡」
 
-    return optimized_list
+　汗まみれで全身密着させた身体がドクンと脈打つ。そのたび、未咲ちゃんは俺を強く抱きしめ、俺は腰をグリグリと押し付け、深い深い絶頂を貪った……♡
+
+　ゼリーのように濃く煮詰められた精液が未咲ちゃんの子宮にひり出されていく♡　この中は俺のモノだと主張する♡　べちゃべちゃに汚していく♡　やがてソレは小さな子宮内を埋め尽くし、なおも大量の精子を注入していった……♡
+
+
+　数十秒してやっと射精が終わり、一度肉棒を引き抜いてみるが……ああ、未咲ちゃんのおまんこが寂しそうに俺のチンポを咥え込んで離そうとしない♡　
+
+　絡みついてくる肉ヒダをずるずると引きずるような感覚でゆっくり引き抜くと、湯気が立ちそうなほどホカホカの熱がむわっと膣穴から広がってくるのを感じた♡
+
+「お゛っ♡♡　焔さん……♡♡」
+（お、お腹重たい……♡　安全日、なんて言っちゃったけど……こんなにたっぷり種付けしてもらって、赤ちゃんデキなかったら申し訳ないかも……♡♡　いっぱいイったら……卵子出ちゃったりしないかな……♡♡）
+
+　幸せそうに名前を呼びながら、煽情的に宙を舐め回す未咲ちゃん。俺はそこへ肉棒を突き出し、精液と愛液まみれのチンポを舌と唇で綺麗にさせた♡
+
+　しかし、もちろんこれだけで終われるわけがない♡　キンタマは苦しいほどに張りつめ、チンポはバキバキに勃起したままだ♡
+
+「ちゅっ♡♡　れろれろ……♡　はい♡　焔さんのおチンポをイライラさせたお詫びに、お好きなだけわたしのおまんこを使ってください……♡♡♡♡」
+
+
+　こうして、俺たちはすぐに二回戦を始めることになった……♡
+
+
+
+―――――
+
+
+
+
+
+「お゛っ……ぉ゛ほっ♡♡　おっ♡♡　んひぃ……♡♡♡♡」
+
+　カーテンの隙間から眩しい光が射し込んでくる。今は何時なのだろう。それすら分からない。ただひたすら、未咲ちゃんのおまんこに腰を振り続けていた。
+
+　ふと時計が目に入る。デジタル時計の日付と時間は、俺が三日三晩の間しつこくしつこく交尾しまくり、未咲ちゃんのお腹を精液で膨らむほど満たしたことを示していた。
+
+　もちろん性行為は直接繋がるだけじゃない。何度も精液を飲ませたし、おっぱいをザーメンまみれになるほどパイズリしてもらったし、自分で腰を振って乳まんこを使いもした。コスプレ衣装は何度も精液をなすりつけ、ぶっかけた末にひどい淫臭を漂わせている。白い肌にどれだけ精液を染み込ませたか、もう数えられないくらいだ。
+
+　そんな情景を見つめながら夢中で腰を振り続けていると、デカ尻を差し出してバックで喘いでいた未咲ちゃんが甲高く喘ぐ。
+"""
+
+
+def main():
+    print("Using Japanese preprocessing")
+    processed_text = preprocess_japanese_text(data)
+    print(processed_text)
+
+    print("\nUsing Langchain")
+    spit_text = split_text_into_chunks(data)
+    print(spit_text)
+
+    print("\nUsing built-in split")
+    line_split = list(filter(None, data.split("\n")))
+    print(line_split)
+
+    # print(processed_text)
+
+
+if __name__ == "__main__":
+    # asyncio.run(main())
+    main()

@@ -158,7 +158,7 @@ class AuralisTTSEngine:
         base64_voices: str | list[str] | bytes | list[bytes] = ref_audio_files[:5]
 
         chunks: list[str] = split_text_into_chunks(input_full_text)
-        print(f"Created {len(chunks)} chunks")
+        print(f"\nCreated {len(chunks)} chunks")
 
         audio_segments: list[TTSOutput] = []
         # todo: refactor this to use batch
@@ -177,6 +177,7 @@ class AuralisTTSEngine:
 
             try:
                 with torch.no_grad():
+                    self.logger.info(f"Processing {chunk}")
                     audio = self.tts.generate_speech(request)
                     audio_segments.append(audio)
                     self.logger.info(f"Processed {idx + 1} chunks out of {len(chunks)}")
