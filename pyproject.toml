@@ -14,10 +14,11 @@ dependencies = [
     "markdown>=3.7",
     "nest-asyncio>=1.6.0",
     "pdfplumber>=0.11.5",
+    "pyrubberband>=0.4.0",
     "sudachidict-core>=20250129",
     "sudachipy>=0.6.10",
     "torch>=2.5.1",
     "torchaudio>=2.5.1",
     "torchvision>=0.20.1",
-    "unidic>=1.1.0"
+    "unidic>=1.1.0",
 ]

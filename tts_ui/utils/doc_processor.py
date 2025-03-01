@@ -4,6 +4,7 @@ from pathlib import Path
 from tts_ui.utils import split_text_into_chunks, extract_text_from_epub, text_from_file
 
 
+# Todo: work on this and migrate from the TTS Engine class
 class DocumentProcessor:
     def __init__(self, max_word_chunk_size=4000):
         self.max_word_chunk_size: int = max_word_chunk_size  # Characters per chunk

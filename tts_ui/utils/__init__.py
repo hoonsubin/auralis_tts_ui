@@ -10,6 +10,8 @@ import regex as re
 import numpy as np
 import jaconv
 import bunkai
+import torch
+import torchaudio
 
 # Create a temporary directory to store short-named files
 tmp_dir = Path("/tmp/auralis")
@@ -17,7 +19,15 @@ tmp_dir.mkdir(exist_ok=True)
 
 
 def shorten_filename(original_path: str) -> str:
-    """Copies the given file to a temporary directory with a shorter, random filename."""
+    """
+    Copies the given file to a temporary directory with a shorter, random filename.
+
+    Args:
+        original_path (str): Path to the original file that will be kept in the temp location
+
+    Returns:
+        str: The short file path saved in a temporary location
+    """
     ext: str = Path(original_path).suffix
     short_name: str = "file_" + uuid.uuid4().hex[:8] + ext
     short_path: Path = tmp_dir / short_name
@@ -94,8 +104,33 @@ def clone_voice(audio_path: str) -> str:
 
 
 def calculate_byte_size(text: str) -> int:
-    """Calculate UTF-8 encoded byte size of text"""
+    """Calculate UTF-8 encoded byte size of provided text"""
     return len(text.encode("utf-8"))
+
+
+def torchaudio_stretch(
+    audio_data: np.ndarray, sample_rate: int, speed_factor: float
+) -> np.ndarray:
+    audio_tensor = torch.from_numpy(audio_data.astype(np.float32))
+
+    # If audio is mono, add batch dimension
+    if audio_tensor.ndim == 1:
+        audio_tensor = audio_tensor.unsqueeze(0)
+
+    effects = [
+        ["tempo", str(speed_factor)],
+        ["rate", str(sample_rate)],  # Ensure sample rate remains the same
+    ]
+
+    # Apply effects
+    # Note: depends on `sox libsox-dev``
+    modified_waveform, modified_sample_rate = (
+        torchaudio.sox_effects.apply_effects_tensor(
+            tensor=audio_tensor, sample_rate=sample_rate, effects=effects
+        )
+    )
+
+    return modified_waveform.T.numpy()
 
 
 def is_japanese(text) -> bool:
@@ -112,12 +147,17 @@ def preprocess_japanese_text(text: str) -> str:
         text.replace("♡", "")
         .replace("♥", "")
         .replace("❤️", "")
+        .replace("︎❤︎", "")
         .replace("゛", "")
         .replace("\n─", "")
         .replace("―", "")
         .replace("─", "")
         .replace("」", " ")
         .replace("「", " ")
+        .replace("【", " ")
+        .replace("】", " ")
+        .replace("『", " ")
+        .replace("』", " ")
     )
     normalized_jp: str = jaconv.normalize(removed_special_char)
     alpha2kana: str = jaconv.alphabet2kana(normalized_jp)
@@ -129,7 +169,7 @@ def remove_empty_item(dirty_list: list):
     return list(filter(None, dirty_list))
 
 
-def convert_audio(data: np.ndarray) -> np.ndarray:
+def convert_audio_to_int16(data: np.ndarray) -> np.ndarray:
     """Convert any float format to proper 16-bit PCM"""
     if data.dtype in [np.float16, np.float32, np.float64]:
         # Normalize first to [-1, 1] range
@@ -223,3 +263,8 @@ def split_text_into_chunks(
     #         optimized_list.extend(local_chunk)
 
     return optimized_list
+
+
+def chunk_generator(text: str, chunk_size: int = 608, chunk_overlap: int = 5):
+    for chunk in split_text_into_chunks(text, chunk_size, chunk_overlap):
+        yield chunk

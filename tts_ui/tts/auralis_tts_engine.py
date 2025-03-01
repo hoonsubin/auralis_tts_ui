@@ -1,20 +1,25 @@
 from auralis import TTS, TTSRequest, TTSOutput, setup_logger
 from gradio import File, Files, Slider
+import numpy as np
 import torch
+import torchaudio
 from tts_ui.utils import (
     calculate_byte_size,
-    split_text_into_chunks,
-    tmp_dir,
+    chunk_generator,
     extract_text_from_epub,
     text_from_file,
-    convert_audio,
+    convert_audio_to_int16,
+    torchaudio_stretch,
 )
+import tempfile
 from tts_ui.utils.doc_processor import DocumentProcessor
 import hashlib
-import torchaudio
 import time
 from pathlib import Path
 import os
+import shutil
+import soundfile as sf
+from pydub import AudioSegment
 
 # Loading the TTS engine first and assign it to the class.
 # This looks ugly, but it works
@@ -50,12 +55,180 @@ except Exception as e:
 # Todo: inherit from the base engine <https://github.com/astramind-ai/Auralis/blob/main/docs/api/core/base.md>
 class AuralisTTSEngine:
     def __init__(self):
+        # create a unique temp file location for this inst
+        tmp_dir = Path(tempfile.mkdtemp())
+        tmp_dir.mkdir(exist_ok=True)
+
         self.logger = logger
         self.tts: TTS = tts
         self.model_path: str = model_path
         self.gpt_model: str = gpt_model
         self.tmp_dir: Path = tmp_dir
         self.doc_processor = DocumentProcessor()
+
+    def _process_large_text(
+        self,
+        input_full_text: str,
+        ref_audio_files: str | list[str] | bytes | list[bytes],
+        speed: float,
+        enhance_speech: bool,
+        temperature: float,
+        top_p: float,
+        top_k: float,
+        repetition_penalty: float,
+        language: str = "auto",
+    ):
+        """Process text in chunks and combine results"""
+        log_messages: str = ""
+
+        if not ref_audio_files:
+            log_messages += "Please provide at least one reference audio!\n"
+            return None, log_messages
+
+        base64_voices: str | list[str] | bytes | list[bytes] = ref_audio_files[:5]
+
+        # failed text chunks
+        failed_chunks: list[(int, str)] = []
+        # successful audio chunks
+        temp_files: list[str] = []
+        processed_count = 0
+
+        # Todo: refactor this to be processed in parallel
+        # Process the batch of chunks into audio
+        for idx, chunk in enumerate(chunk_generator(input_full_text)):
+            request = TTSRequest(
+                text=chunk,
+                speaker_files=base64_voices,
+                stream=False,
+                enhance_speech=enhance_speech,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                repetition_penalty=repetition_penalty,
+                language=language,
+            )
+
+            max_retry = 5
+            current_attempts = 0
+            can_retry: bool = current_attempts <= max_retry
+
+            while can_retry:
+                try:
+                    with torch.no_grad():
+                        self.logger.info(f"Processing {chunk}")
+                        audio: TTSOutput = self.tts.generate_speech(request)
+
+                        # Save the current chunk to disk for processing it later
+                        temp_file_path: str = os.path.join(
+                            self.tmp_dir, f"chunk_{idx:04d}.wav"
+                        )
+
+                        sf.write(
+                            file=temp_file_path,
+                            # Convert float16 to int16
+                            data=convert_audio_to_int16(audio.array),
+                            samplerate=audio.sample_rate,
+                        )
+                        temp_files.append(temp_file_path)
+
+                        processed_count += 1
+                        self.logger.info(f"Processed {idx + 1} chunks")
+
+                        # Clean up GPU memory for every 10 chunks
+                        if (idx + 1) % 10 == 0:
+                            print("Emptying GPU cache")
+                            torch.cuda.empty_cache()  # If using GPU
+
+                        # Break out of the while loop and continue with the next chunk
+                        break
+
+                except Exception as e:
+                    # Retry the chunk process until the retry limit
+                    if not can_retry:
+                        # Add this chunk to the error list and move on to the next chunk
+                        failed_chunks.append((idx, str(e)))
+                        self.logger.warning(
+                            f"⚠️ Exceeded max retries for chunk {idx + 1}"
+                        )
+                        break
+
+                    # Retry the chunk after a waiting period
+                    current_attempts += 1
+                    wait_time = 2 ** (current_attempts - 1)  # Exponential backoff
+                    self.logger.warning(
+                        f"⚠️ Failed chunk {idx + 1}: {str(e)}.\nRetrying in {wait_time}s..."
+                    )
+                    time.sleep(wait_time)
+
+        # If the entire process failed
+        if processed_count == 0:
+            log_messages += "❌ All chunk processing failed"
+            self._clean_temp_path()
+            return None, log_messages
+
+        # Report partial success if some chunks failed
+        if failed_chunks:
+            log_messages += (
+                f"⚠️ Completed with {len(failed_chunks)} failed chunks "
+                f"({processed_count} succeeded)\n"
+            )
+
+        # Combine the saved audio chunks into one using pydub (good for WAV files)
+        try:
+            self.logger.info(f"Combining {len(temp_files)} audio chunks...")
+            combined_audio_path = os.path.join(self.tmp_dir, "combined_output.wav")
+
+            # Create an empty audio segment
+            combined: AudioSegment = AudioSegment.empty()
+
+            # Add each chunk one by one (streaming from disk)
+            for file_path in temp_files:
+                chunk_audio = AudioSegment.from_wav(file_path)
+                combined += chunk_audio
+
+                # Immediately remove the file after adding to free disk space
+                os.remove(file_path)
+
+            # Export the combined audio to a temporary file
+            combined.export(combined_audio_path, format="wav")
+
+            # Todo: can we optimize this further? Loading what we just saved does't look nice
+            # Read the exported audio file again
+            audio_data, sample_rate = sf.read(combined_audio_path)
+
+            final_audio: TTSOutput = TTSOutput(
+                array=audio_data, sample_rate=sample_rate
+            )
+
+            if speed != 1:
+                # final_audio = torchaudio_stretch(
+                #     audio_data=final_audio.array,
+                #     sample_rate=final_audio.sample_rate,
+                #     speed_factor=speed,
+                # )
+                final_audio = final_audio.change_speed(speed)
+
+            log_messages += "✅ Successfully Generated audio\n"
+            self.logger.info(log_messages)
+
+        except Exception as e:
+            log_messages += f"❌ Failed to write chunks: {e}"
+            self.logger.error(log_messages)
+
+        finally:
+            # Clean up all temporary files
+            self._clean_temp_path()
+
+            # return the final audio
+            return (
+                sample_rate,
+                convert_audio_to_int16(final_audio.array),
+            ), log_messages
+
+    def _clean_temp_path(self):
+        # remove and make an empty temp folder
+        shutil.rmtree(self.tmp_dir)
+        self.tmp_dir.mkdir(exist_ok=True)
 
     def process_text_and_generate(
         self,
@@ -121,11 +294,10 @@ class AuralisTTSEngine:
                         if speed != 1:
                             output.change_speed(speed)
                         log_messages += "✅ Successfully Generated audio\n"
-                        self.logger.info(log_messages)
                         # return the sample rate and the audio file as a byte array
                         return (
                             output.sample_rate,
-                            convert_audio(output.array),
+                            convert_audio_to_int16(output.array),
                         ), log_messages
 
                     else:
@@ -135,99 +307,6 @@ class AuralisTTSEngine:
                 self.logger.error(f"Error: {e}")
                 log_messages += f"❌ An Error occured: {e}\n"
                 return None, log_messages
-
-    def _process_large_text(
-        self,
-        input_full_text: str,
-        ref_audio_files: str | list[str] | bytes | list[bytes],
-        speed: float,
-        enhance_speech: bool,
-        temperature: float,
-        top_p: float,
-        top_k: float,
-        repetition_penalty: float,
-        language: str = "auto",
-    ):
-        """Process text in chunks and combine results"""
-        log_messages: str = ""
-
-        if not ref_audio_files:
-            log_messages += "Please provide at least one reference audio!\n"
-            return None, log_messages
-
-        base64_voices: str | list[str] | bytes | list[bytes] = ref_audio_files[:5]
-
-        chunks: list[str] = split_text_into_chunks(input_full_text)
-        print(f"\nCreated {len(chunks)} chunks")
-
-        # audio_segments: list[TTSOutput] = []
-        combined_output: TTSOutput = None
-        failed_chunks = []
-        processed_count = 0
-
-        # todo: refactor this to use batch
-        for idx, chunk in enumerate(chunks):
-            request = TTSRequest(
-                text=chunk,
-                speaker_files=base64_voices,
-                stream=False,
-                enhance_speech=enhance_speech,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
-                repetition_penalty=repetition_penalty,
-                language=language,
-            )
-
-            try:
-                with torch.no_grad():
-                    self.logger.info(f"Processing {chunk}")
-                    audio = self.tts.generate_speech(request)
-
-                    # Incremental combination to save memory
-                    if combined_output is None:
-                        combined_output = audio
-                    else:
-                        combined_output = TTSOutput.combine_outputs(
-                            [combined_output, audio]
-                        )
-                    processed_count += 1
-
-                    # Optional: Periodically clear memory
-                    if (idx + 1) % 10 == 0:
-                        print("Emptying GPU cache")
-                        torch.cuda.empty_cache()  # If using GPU
-
-                    # audio_segments.append(audio)
-                    self.logger.info(f"Processed {idx + 1} chunks out of {len(chunks)}")
-
-            except Exception as e:
-                failed_chunks.append((idx, str(e)))
-                log_messages.append(f"⚠️ Failed chunk {idx}: {str(e)}")
-                continue
-
-        if processed_count == 0:
-            log_messages.append("❌ All chunk processing failed")
-            return None, "\n".log_messages
-
-        # combined_output: TTSOutput = TTSOutput.combine_outputs(audio_segments)
-
-        if speed != 1:
-            combined_output.change_speed(speed)
-
-            # Report partial success if some chunks failed
-        if failed_chunks:
-            log_messages.append(
-                f"⚠️ Completed with {len(failed_chunks)} failed chunks "
-                f"({processed_count}/{len(chunks)} succeeded)"
-            )
-
-        log_messages += "✅ Successfully Generated audio\n"
-        # return combined_output
-        return (
-            combined_output.sample_rate,
-            convert_audio(combined_output.array),
-        ), log_messages
 
     def process_file_and_generate(
         self,

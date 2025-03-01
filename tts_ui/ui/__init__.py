@@ -101,7 +101,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                     generate_button = gr.Button("Generate Speech")
                 with gr.Column():
-                    audio_output = gr.Audio(label="Generated Audio")
+                    audio_output = gr.Audio(label="Generated Audio", type="numpy")
                     log_output = gr.Text(label="Log Output")
 
             generate_button.click(
@@ -175,7 +175,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                     generate_button_file = gr.Button("Generate Speech from File")
                 with gr.Column():
-                    audio_output_file = gr.Audio(label="Generated Audio")
+                    audio_output_file = gr.Audio(label="Generated Audio", type="numpy")
                     log_output_file = gr.Text(label="Log Output")
 
             generate_button_file.click(
@@ -251,7 +251,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                     generate_button_mic = gr.Button("Generate Speech")
                 with gr.Column():
-                    audio_output_mic = gr.Audio(label="Generated Audio")
+                    audio_output_mic = gr.Audio(label="Generated Audio", type="numpy")
                     log_output_mic = gr.Text(label="Log Output")
 
             generate_button_mic.click(
