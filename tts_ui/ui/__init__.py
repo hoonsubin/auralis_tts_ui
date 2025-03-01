@@ -24,11 +24,11 @@ supported_langs: list[str] = [
 ]
 
 default_values: dict[str, float] = {
-    "playback_speed": 1.1,
-    "temperature": 0.55,
+    "playback_speed": 1.0,
+    "temperature": 0.6,
     "top_p": 0.65,
-    "top_k": 20,
-    "repetition_penalty": 5.0,
+    "top_k": 30,
+    "repetition_penalty": 4.5,
 }
 
 

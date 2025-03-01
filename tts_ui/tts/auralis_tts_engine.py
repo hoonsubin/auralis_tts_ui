@@ -1,6 +1,5 @@
 from auralis import TTS, TTSRequest, TTSOutput, setup_logger
 from gradio import File, Files, Slider
-import numpy as np
 import torch
 import torchaudio
 from tts_ui.utils import (
@@ -9,7 +8,6 @@ from tts_ui.utils import (
     extract_text_from_epub,
     text_from_file,
     convert_audio_to_int16,
-    torchaudio_stretch,
 )
 import tempfile
 from tts_ui.utils.doc_processor import DocumentProcessor
@@ -52,7 +50,6 @@ except Exception as e:
     raise Exception(error_msg)
 
 
-# Todo: inherit from the base engine <https://github.com/astramind-ai/Auralis/blob/main/docs/api/core/base.md>
 class AuralisTTSEngine:
     def __init__(self):
         # create a unique temp file location for this inst
@@ -69,7 +66,7 @@ class AuralisTTSEngine:
     def _process_large_text(
         self,
         input_full_text: str,
-        ref_audio_files: str | list[str] | bytes | list[bytes],
+        ref_audio: str | list[str] | bytes | list[bytes],
         speed: float,
         enhance_speech: bool,
         temperature: float,
@@ -81,11 +78,11 @@ class AuralisTTSEngine:
         """Process text in chunks and combine results"""
         log_messages: str = ""
 
-        if not ref_audio_files:
+        if not ref_audio:
             log_messages += "Please provide at least one reference audio!\n"
             return None, log_messages
 
-        base64_voices: str | list[str] | bytes | list[bytes] = ref_audio_files[:5]
+        base64_voices: str | list[str] | bytes | list[bytes] = ref_audio[:5]
 
         # failed text chunks
         failed_chunks: list[(int, str)] = []
@@ -115,7 +112,7 @@ class AuralisTTSEngine:
             while can_retry:
                 try:
                     with torch.no_grad():
-                        self.logger.info(f"Processing {chunk}")
+                        # self.logger.info(f"Processing {chunk}")
                         audio: TTSOutput = self.tts.generate_speech(request)
 
                         # Save the current chunk to disk for processing it later
@@ -159,6 +156,8 @@ class AuralisTTSEngine:
                         f"⚠️ Failed chunk {idx + 1}: {str(e)}.\nRetrying in {wait_time}s..."
                     )
                     time.sleep(wait_time)
+                    # Better to be explicit
+                    continue
 
         # If the entire process failed
         if processed_count == 0:
@@ -221,7 +220,7 @@ class AuralisTTSEngine:
 
             # return the final audio
             return (
-                sample_rate,
+                final_audio.sample_rate,
                 convert_audio_to_int16(final_audio.array),
             ), log_messages
 

@@ -248,20 +248,6 @@ def split_text_into_chunks(
 
             optimized_list.extend(local_chunk)
 
-    # great quality, but too slow
-    # optimized_list: list[str] = []
-
-    # for current_text in chunks:
-    #     # add the text if it's shorter than the max chunk size
-    #     if len(current_text) <= chunk_size:
-    #         optimized_list.append(current_text)
-    #     else:
-    #         local_chunk = []
-    #         # further split the chunk
-    #         for local_batch in splitter.split_text(text_to_process):
-    #             local_chunk.append(local_batch)
-    #         optimized_list.extend(local_chunk)
-
     return optimized_list
 
 
