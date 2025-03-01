@@ -160,7 +160,11 @@ class AuralisTTSEngine:
         chunks: list[str] = split_text_into_chunks(input_full_text)
         print(f"\nCreated {len(chunks)} chunks")
 
-        audio_segments: list[TTSOutput] = []
+        # audio_segments: list[TTSOutput] = []
+        combined_output: TTSOutput = None
+        failed_chunks = []
+        processed_count = 0
+
         # todo: refactor this to use batch
         for idx, chunk in enumerate(chunks):
             request = TTSRequest(
@@ -179,21 +183,44 @@ class AuralisTTSEngine:
                 with torch.no_grad():
                     self.logger.info(f"Processing {chunk}")
                     audio = self.tts.generate_speech(request)
-                    audio_segments.append(audio)
+
+                    # Incremental combination to save memory
+                    if combined_output is None:
+                        combined_output = audio
+                    else:
+                        combined_output = TTSOutput.combine_outputs(
+                            [combined_output, audio]
+                        )
+                    processed_count += 1
+
+                    # Optional: Periodically clear memory
+                    if (idx + 1) % 10 == 0:
+                        print("Emptying GPU cache")
+                        torch.cuda.empty_cache()  # If using GPU
+
+                    # audio_segments.append(audio)
                     self.logger.info(f"Processed {idx + 1} chunks out of {len(chunks)}")
 
             except Exception as e:
-                log_messages += f"❌ Chunk processing failed: {e}\n"
-                return None, log_messages
+                failed_chunks.append((idx, str(e)))
+                log_messages.append(f"⚠️ Failed chunk {idx}: {str(e)}")
+                continue
 
-        if len(audio_segments) <= 0:
-            log_messages += f"❌ Chunk processing failed. Chunk size: {len(chunks)}\n"
-            return None, log_messages
+        if processed_count == 0:
+            log_messages.append("❌ All chunk processing failed")
+            return None, "\n".log_messages
 
-        combined_output: TTSOutput = TTSOutput.combine_outputs(audio_segments)
+        # combined_output: TTSOutput = TTSOutput.combine_outputs(audio_segments)
 
         if speed != 1:
             combined_output.change_speed(speed)
+
+            # Report partial success if some chunks failed
+        if failed_chunks:
+            log_messages.append(
+                f"⚠️ Completed with {len(failed_chunks)} failed chunks "
+                f"({processed_count}/{len(chunks)} succeeded)"
+            )
 
         log_messages += "✅ Successfully Generated audio\n"
         # return combined_output

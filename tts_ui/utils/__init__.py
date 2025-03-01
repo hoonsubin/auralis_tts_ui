@@ -1,5 +1,4 @@
 import base64
-from typing import List
 import uuid
 import shutil
 from pathlib import Path
@@ -7,7 +6,6 @@ import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from yakinori import Yakinori
 import regex as re
 import numpy as np
 import jaconv
@@ -112,26 +110,17 @@ def is_japanese(text) -> bool:
 def preprocess_japanese_text(text: str) -> str:
     removed_special_char = (
         text.replace("♡", "")
+        .replace("♥", "")
+        .replace("❤️", "")
         .replace("゛", "")
         .replace("\n─", "")
         .replace("―", "")
         .replace("─", "")
+        .replace("」", " ")
+        .replace("「", " ")
     )
     normalized_jp: str = jaconv.normalize(removed_special_char)
     alpha2kana: str = jaconv.alphabet2kana(normalized_jp)
-
-    # yakinori = Yakinori()
-
-    # splitter = bunkai.Bunkai()
-
-    # sentences: np.Iterator[str] = splitter(normalized_jp)
-
-    # final: str = ""
-
-    # for sentence in sentences:
-    #     parsed_list: list[str] = yakinori.get_parsed_list(sentence)
-    #     hiragana: str = yakinori.get_hiragana_sentence(parsed_list, is_hatsuon=True)
-    #     final += hiragana
 
     return alpha2kana
 
