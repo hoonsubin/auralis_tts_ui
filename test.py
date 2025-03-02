@@ -1,3 +1,4 @@
+import gc
 import glob
 import random
 import soundfile as sf
@@ -12,12 +13,9 @@ def process_all_local_docs():
     audio_save_path = "./data/output"
     base_data_path = "./data"
 
-    all_texts: list[str] = glob.glob(f"{base_data_path}/docs/*.txt", recursive=False)
-    all_markdown: list[str] = glob.glob(f"{base_data_path}/docs/*.md", recursive=False)
+    all_texts = glob.glob(f"{base_data_path}/docs/**/*.[tm][xd]", recursive=True)
 
-    all_voices: list[str] = glob.glob(f"{base_data_path}/voices/*.wav", recursive=False)
-
-    all_texts.extend(all_markdown)
+    all_voices = glob.glob(f"{base_data_path}/voices/*.wav", recursive=False)
 
     print(f"Found {len(all_texts)} files to process")
 
@@ -26,8 +24,6 @@ def process_all_local_docs():
         abs_text_path: str = os.path.abspath(text_to_process)
 
         print(f"Using {random_voice_path} as sample")
-
-        # ref_voice, sample_rate = sf.read(random_voice_path)
 
         with open(abs_text_path, "r", encoding="utf-8") as f:
             text_content: str = f.read()
@@ -59,6 +55,10 @@ def process_all_local_docs():
         print(
             f"Finished processing {index + 1} files out of {len(all_texts)}.\nSaved to {save_path}."
         )
+        print("Cleaning up task")
+        # Add manual garbage collection
+        del audio_data
+        gc.collect()
 
 
 def main():

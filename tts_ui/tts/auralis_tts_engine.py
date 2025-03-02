@@ -4,7 +4,7 @@ import torch
 import torchaudio
 from tts_ui.utils import (
     calculate_byte_size,
-    chunk_generator,
+    split_text_into_chunks,
     extract_text_from_epub,
     text_from_file,
     convert_audio_to_int16,
@@ -90,9 +90,12 @@ class AuralisTTSEngine:
         temp_files: list[str] = []
         processed_count = 0
 
+        chunks_to_process = split_text_into_chunks(input_full_text)
+        print(f"Created {len(chunks_to_process)} chunks")
+
         # Todo: refactor this to be processed in parallel
         # Process the batch of chunks into audio
-        for idx, chunk in enumerate(chunk_generator(input_full_text)):
+        for idx, chunk in enumerate(chunks_to_process):
             request = TTSRequest(
                 text=chunk,
                 speaker_files=ref_audio,
@@ -128,11 +131,13 @@ class AuralisTTSEngine:
                         temp_files.append(temp_file_path)
 
                         processed_count += 1
-                        self.logger.info(f"Processed {idx + 1} chunks")
+                        self.logger.info(
+                            f"Processed {idx + 1} chunks out of {len(chunks_to_process)}"
+                        )
 
                         # Clean up GPU memory for every 10 chunks
                         if (idx + 1) % 10 == 0:
-                            print("Emptying GPU cache")
+                            self.logger.info("Emptying GPU cache")
                             torch.cuda.empty_cache()  # If using GPU
 
                         # Break out of the while loop and continue with the next chunk
