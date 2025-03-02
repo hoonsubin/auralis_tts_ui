@@ -82,7 +82,7 @@ class AuralisTTSEngine:
             log_messages += "Please provide at least one reference audio!\n"
             return None, log_messages
 
-        base64_voices: str | list[str] | bytes | list[bytes] = ref_audio[:5]
+        print(f"Using sample voice from {ref_audio}")
 
         # failed text chunks
         failed_chunks: list[(int, str)] = []
@@ -95,7 +95,7 @@ class AuralisTTSEngine:
         for idx, chunk in enumerate(chunk_generator(input_full_text)):
             request = TTSRequest(
                 text=chunk,
-                speaker_files=base64_voices,
+                speaker_files=ref_audio,
                 stream=False,
                 enhance_speech=enhance_speech,
                 temperature=temperature,
@@ -114,7 +114,6 @@ class AuralisTTSEngine:
                     with torch.no_grad():
                         # self.logger.info(f"Processing {chunk}")
                         audio: TTSOutput = self.tts.generate_speech(request)
-
                         # Save the current chunk to disk for processing it later
                         temp_file_path: str = os.path.join(
                             self.tmp_dir, f"chunk_{idx:04d}.wav"
