@@ -139,6 +139,7 @@ class AuralisTTSEngine:
             )
 
             # Todo: This consumes a lot of memory.
+            # Todo: Properly handle multiple outputs when the audio is too large
             # Read the exported audio file again
             audio_data, sample_rate = sf.read(combined_audio_path[0])
 
@@ -262,14 +263,14 @@ class AuralisTTSEngine:
         self.logger.info("Performing clean up task")
         # remove and make an empty temp folder
         shutil.rmtree(self.tmp_dir)
-        # self.tmp_dir.mkdir(exist_ok=True)
+        self.tmp_dir.mkdir(exist_ok=True)
 
     def _combine_audio(self, chunk_paths: list[str], audio_chunk_size=8192) -> str:
         max_size_gb = 3.8
 
         max_size: float = max_size_gb * 1024**3  # Convert GB to bytes
 
-        output_dir: str = os.path.abspath("./data/")
+        output_dir: str = os.path.abspath(self.tmp_dir)
 
         combined_output_path: list[str] = []
 

@@ -47,7 +47,6 @@ def process_all_local_docs():
         save_path: str = f"{audio_save_path}/{doc_name}.mp3"
         sf.write(
             file=save_path,
-            # Convert float16 to int16
             data=audio_data,
             samplerate=sample_rate,
         )
