@@ -193,7 +193,7 @@ def convert_audio_to_int16(data: np.ndarray) -> np.ndarray:
     return data
 
 
-def split_text_into_chunks(
+def optimize_text_input(
     text: str, chunk_size: int = 608, chunk_overlap: int = 5
 ) -> list[str]:
     """
@@ -227,39 +227,42 @@ def split_text_into_chunks(
         "",
     ]
 
-    # todo: optimize this function so it stores batches locally in the temp folder instead of loading everything in memory
-    # todo: implement a tokenized context batch size manager using https://huggingface.co/AstraMindAI/xtts2-gpt/blob/main/tokenizer.py
-    splitter = RecursiveCharacterTextSplitter(
-        separators=text_separators,
-        chunk_size=chunk_size,  # Optimized for TTS context windows
-        chunk_overlap=chunk_overlap,
-        length_function=len,
-        is_separator_regex=False,
-    )
-
     optimized_list: list[str] = []
 
-    split_chunks: list[str] = splitter.split_text(text_to_process)
+    if len(text_to_process) > chunk_size:
+        # todo: optimize this function so it stores batches locally in the temp folder instead of loading everything in memory
+        # todo: implement a tokenized context batch size manager using https://huggingface.co/AstraMindAI/xtts2-gpt/blob/main/tokenizer.py
+        splitter = RecursiveCharacterTextSplitter(
+            separators=text_separators,
+            chunk_size=chunk_size,  # Optimized for TTS context windows
+            chunk_overlap=chunk_overlap,
+            length_function=len,
+            is_separator_regex=False,
+        )
 
-    splitter = bunkai.Bunkai()
+        split_chunks: list[str] = splitter.split_text(text_to_process)
 
-    for current_text in split_chunks:
-        # add the text if it's shorter than the max chunk size
-        if len(current_text) <= chunk_size:
-            optimized_list.append(current_text)
-        else:
-            local_chunk: list[str] = []
-            print(f"Found a large chunk: {current_text}")
-            # further split the chunk
-            if is_japanese(current_text):
-                for local_batch in splitter(current_text):
-                    local_chunk.append(local_batch)
+        splitter = bunkai.Bunkai()
+
+        for current_text in split_chunks:
+            # add the text if it's shorter than the max chunk size
+            if len(current_text) <= chunk_size:
+                optimized_list.append(current_text)
             else:
-                for local_batch in remove_empty_item(
-                    current_text.split("\n", chunk_overlap)
-                ):
-                    local_chunk.append(local_batch)
+                local_chunk: list[str] = []
+                print(f"Found a large chunk: {current_text}")
+                # further split the chunk
+                if is_japanese(current_text):
+                    for local_batch in splitter(current_text):
+                        local_chunk.append(local_batch)
+                else:
+                    for local_batch in remove_empty_item(
+                        current_text.split("\n", chunk_overlap)
+                    ):
+                        local_chunk.append(local_batch)
 
-            optimized_list.extend(local_chunk)
+                optimized_list.extend(local_chunk)
+        else:
+            optimized_list.append(text_to_process)
 
     return optimized_list

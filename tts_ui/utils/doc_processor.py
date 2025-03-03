@@ -1,7 +1,7 @@
 import markdown
 import pdfplumber
 from pathlib import Path
-from tts_ui.utils import split_text_into_chunks, extract_text_from_epub, text_from_file
+from tts_ui.utils import optimize_text_input, extract_text_from_epub, text_from_file
 
 
 # Todo: work on this and migrate from the TTS Engine class
@@ -46,4 +46,4 @@ class DocumentProcessor:
         return self._chunk_text(text)
 
     def _chunk_text(self, text: str) -> list[str]:
-        return split_text_into_chunks(text, self.max_word_chunk_size)
+        return optimize_text_input(text, self.max_word_chunk_size)

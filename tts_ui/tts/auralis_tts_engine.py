@@ -5,7 +5,7 @@ import torch
 import torchaudio
 from tts_ui.utils import (
     calculate_byte_size,
-    split_text_into_chunks,
+    optimize_text_input,
     extract_text_from_epub,
     text_from_file,
     convert_audio_to_int16,
@@ -53,7 +53,6 @@ class AuralisTTSEngine:
                 model_name_or_path=model_path,
                 gpt_model=gpt_model,
                 enforce_eager=False,
-                max_concurrency=4,  # need to adjust this based on the host machine or it can cause `AsyncEngineDeadError`
             )
 
             logger.info(f"Successfully loaded model {model_path}")
@@ -103,12 +102,6 @@ class AuralisTTSEngine:
 
         print(f"Using sample voice from {ref_audio}")
 
-        # Note: This works without issue (but we could make some improvements)
-        chunks_to_process: list[str] = split_text_into_chunks(
-            text=input_full_text, chunk_size=2000, chunk_overlap=0
-        )
-        print(f"Created {len(chunks_to_process)} chunks")
-
         request = TTSRequest(
             text=input_full_text,
             speaker_files=ref_audio,
@@ -120,6 +113,12 @@ class AuralisTTSEngine:
             repetition_penalty=repetition_penalty,
             language=language,
         )
+
+        # Note: This works without issue (but we could make some improvements)
+        chunks_to_process: list[str] = optimize_text_input(
+            text=input_full_text, chunk_size=1000, chunk_overlap=0
+        )
+        print(f"Created {len(chunks_to_process)} chunks")
 
         # Note: This could be done in parallel, but it works in most cases without issues (albeit very slow)
         processed_chunk_paths, failed_chunks = self._process_text_in_chunks(
