@@ -137,7 +137,12 @@ class AuralisTTSEngine:
         try:
             # Note: This mostly works, but audio format becomes an important factor. We can improve this
             # Note: .wav files cannot be larger than 4gb. Probably good to just make this into a mp3
-            combined_audio_path: list[str] = self._combine_audio(processed_chunk_paths)
+            combined_audio_path: list[str] = (
+                self._combine_audio(processed_chunk_paths)
+                if len(processed_chunk_paths)
+                > 1  # Only process if there are more than one audio chunks
+                else processed_chunk_paths
+            )
 
             print(
                 f"Reading the combined audio from {combined_audio_path} using Soundfile"

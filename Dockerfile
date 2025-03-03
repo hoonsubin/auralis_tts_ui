@@ -86,7 +86,6 @@ RUN uv pip install --upgrade pip setuptools wheel && \
 
   RUN uv pip install \
   torch \
-  torchvision \
   torchaudio \
   torchdatasets \
   torchtext \
