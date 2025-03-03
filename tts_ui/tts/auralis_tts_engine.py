@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import torchaudio
 from tts_ui.utils import (
-    calculate_byte_size,
     optimize_text_input,
     extract_text_from_epub,
     text_from_file,
@@ -66,6 +65,8 @@ class AuralisTTSEngine:
         self.model_path: str = model_path
         self.gpt_model: str = gpt_model
 
+        self.log_messages: str | None = None
+
         self.doc_processor = DocumentProcessor()
 
     def _create_new_session_ui(self):
@@ -78,55 +79,36 @@ class AuralisTTSEngine:
 
         return _gen_uid
 
-    def generate_audio_from_large_text(
-        self,
-        input_full_text: str,
-        ref_audio: str | list[str] | bytes | list[bytes],
-        speed: float,
-        enhance_speech: bool,
-        temperature: float,
-        top_p: float,
-        top_k: float,
-        repetition_penalty: float,
-        language: str = "auto",
-    ):
+    def generate_audio_from_text(self, request: TTSRequest, speed: float = 1.0):
         """
-        The main text processing function that can handle text of any size and convert them into a long audio file
+        The main text processing function that can handle text of any size and convert them into a long audio file.
+        This only converts and returns the path to the final audio file. It does not return the audio data
         """
 
-        log_messages: str = ""
+        self.log_messages: str = ""
+        combined_audio_path: list[str] = []
 
-        if not ref_audio:
-            log_messages += "Please provide at least one reference audio!\n"
-            return None, log_messages
+        if not request.speaker_files:
+            self.log_messages += "Please provide at least one reference audio!\n"
+            return combined_audio_path
 
-        print(f"Using sample voice from {ref_audio}")
+        print(f"Using sample voice from {request.speaker_files}")
 
-        request = TTSRequest(
-            text=input_full_text,
-            speaker_files=ref_audio,
-            stream=False,
-            enhance_speech=enhance_speech,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            repetition_penalty=repetition_penalty,
-            language=language,
-        )
+        full_text = str(request.text)
 
         # Note: This works without issue (but we could make some improvements)
         chunks_to_process: list[str] = optimize_text_input(
-            text=input_full_text, chunk_size=1000, chunk_overlap=0
+            text=full_text, chunk_size=1000, chunk_overlap=0
         )
         print(f"Created {len(chunks_to_process)} chunks")
 
         # Note: This could be done in parallel, but it works in most cases without issues (albeit very slow)
         processed_chunk_paths, failed_chunks = self._process_text_in_chunks(
-            chunks_to_process=chunks_to_process, tts_req=request
+            chunks_to_process=chunks_to_process, tts_req=request, speed=speed
         )
 
         if failed_chunks:
-            log_messages = (
+            self.log_messages = (
                 f"⚠️ Completed with {len(failed_chunks)} failed chunks "
                 f"({len(processed_chunk_paths)} succeeded)\n"
             )
@@ -137,7 +119,7 @@ class AuralisTTSEngine:
         try:
             # Note: This mostly works, but audio format becomes an important factor. We can improve this
             # Note: .wav files cannot be larger than 4gb. Probably good to just make this into a mp3
-            combined_audio_path: list[str] = (
+            combined_audio_path = (
                 self._combine_audio(processed_chunk_paths)
                 if len(processed_chunk_paths)
                 > 1  # Only process if there are more than one audio chunks
@@ -151,38 +133,26 @@ class AuralisTTSEngine:
             # Todo: This consumes a lot of memory.
             # Todo: Properly handle multiple outputs when the audio is too large
             # Read the exported audio file again
-            audio_data, sample_rate = sf.read(combined_audio_path[0])
+            # audio_data, sample_rate = sf.read(combined_audio_path[0])
 
-            final_audio: np.ndarray = audio_data
-
-            if speed != 1:
-                final_audio = torchaudio_stretch(
-                    audio_data=audio_data,
-                    sample_rate=sample_rate,
-                    speed_factor=speed,
-                )
-                print(f"Adjusting the final audio speed value by {speed}")
-
-            log_messages += "✅ Successfully Generated audio\n"
-            self.logger.info(log_messages)
+            self.log_messages += "✅ Successfully Generated audio\n"
+            self.logger.info(self.log_messages)
 
         except Exception as e:
-            log_messages += f"❌ Failed to write chunks: {e}"
-            self.logger.error(log_messages)
+            self.log_messages += f"❌ Failed to write chunks: {e}"
+            self.logger.error(self.log_messages)
 
         finally:
-            # Clean up all temporary files
-            # self._clean_temp_work_path()
-
             print("Returning the final audio file")
             # return the final audio
-            return (
-                sample_rate,
-                convert_audio_to_int16(final_audio),
-            ), log_messages
+            return combined_audio_path
 
     def _process_text_in_chunks(
-        self, chunks_to_process: list[str], tts_req: TTSRequest, max_retry=5
+        self,
+        chunks_to_process: list[str],
+        tts_req: TTSRequest,
+        speed: float = 1.0,
+        max_retry=5,
     ):
         # failed text chunks
         failed_chunks: list[(int, str)] = []
@@ -216,8 +186,21 @@ class AuralisTTSEngine:
                         # self.logger.info(f"Processing {chunk}")
                         audio: TTSOutput = self.tts.generate_speech(request)
 
+                        final_audio_data: np.ndarray = audio.array
+
+                        # Might be slower to process her chunk, but better than having to load gb of audio at once
+                        if speed != 1:
+                            final_audio_data = torchaudio_stretch(
+                                audio_data=audio.array,
+                                sample_rate=audio.sample_rate,
+                                speed_factor=speed,
+                            )
+                            self.logger.info(
+                                f"Adjusting the final audio speed value by {speed}"
+                            )
+
                     # Create a unique chunk name that can be sorted alphanumerically
-                    audio_hash: str = get_hash_from_data(audio.array.tobytes())
+                    audio_hash: str = get_hash_from_data(final_audio_data.tobytes())
                     chunk_save_path: str = (
                         base_work_dir.joinpath(f"{audio_hash}_chunk_{idx:03d}.wav")
                         .resolve()
@@ -233,7 +216,7 @@ class AuralisTTSEngine:
                     sf.write(
                         file=chunk_save_path,
                         # Convert float16 to int16
-                        data=convert_audio_to_int16(audio.array),
+                        data=convert_audio_to_int16(final_audio_data),
                         samplerate=audio.sample_rate,
                     )
                     processed_chunks.append(chunk_save_path)
@@ -297,11 +280,11 @@ class AuralisTTSEngine:
             subtype = ref_file.subtype
             format_check = (samplerate, channels, subtype)
 
-            # Initialize output management
-            _tmp_dir_base: Path = self.tmp_dir_base.joinpath("_store/")
-            _tmp_dir_base.mkdir(exist_ok=True)
-
             head_file_hash = get_hash_from_data(ref_file.name + self.session_uid)
+
+        # Initialize output management
+        _tmp_dir_base: Path = self.tmp_dir_base.joinpath("_store/")
+        _tmp_dir_base.mkdir(exist_ok=True)
 
         for f in chunk_paths[1:]:
             with sf.SoundFile(f) as test_file:
@@ -368,69 +351,28 @@ class AuralisTTSEngine:
         *args,
     ):
         """Process text and generate audio."""
-        log_messages: str = ""
-        if not ref_audio_files:
-            log_messages += "Please provide at least one reference audio!\n"
-            return None, log_messages
+        request = TTSRequest(
+            text=input_text,
+            speaker_files=ref_audio_files,
+            stream=False,
+            enhance_speech=enhance_speech,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            repetition_penalty=repetition_penalty,
+            language=language,
+        )
 
-        input_size = calculate_byte_size(input_text)
+        converted_audio_list = self.generate_audio_from_text(request, speed)
 
-        # use the chunking process if the text is too large
-        if input_size > 45000:
-            self.logger.info(
-                f"Found {input_size} bytes of text. Switching to chunk mode."
-            )
-            # todo: this function has a couple of overlapping functions as normal processing. I need to optimize the code
-            return self.generate_audio_from_large_text(
-                input_full_text=input_text,
-                ref_audio_files=ref_audio_files,
-                speed=speed,
-                enhance_speech=enhance_speech,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
-                repetition_penalty=repetition_penalty,
-                language=language,
-            )
-        else:
-            try:
-                with torch.no_grad():
-                    # clone voices from all file paths (shorten them)
-                    base64_voices: str | list[str] | bytes | list[bytes] = (
-                        ref_audio_files[:5]
-                    )
+        output_data: list[tuple[int, np.ndarray]] = []
 
-                    request = TTSRequest(
-                        text=input_text,
-                        speaker_files=base64_voices,
-                        stream=False,
-                        enhance_speech=enhance_speech,
-                        temperature=temperature,
-                        top_p=top_p,
-                        top_k=top_k,
-                        repetition_penalty=repetition_penalty,
-                        language=language,
-                    )
+        for converted_audio_path in converted_audio_list:
+            audio_data, samplerate = sf.read(converted_audio_path)
+            output_data.append((samplerate, convert_audio_to_int16(audio_data)))
 
-                    output: TTSOutput = self.tts.generate_speech(request)
-
-                    if output:
-                        if speed != 1:
-                            output.change_speed(speed)
-                        log_messages += "✅ Successfully Generated audio\n"
-                        # return the sample rate and the audio file as a byte array
-                        return (
-                            output.sample_rate,
-                            convert_audio_to_int16(output.array),
-                        ), log_messages
-
-                    else:
-                        log_messages += "❌ No output was generated. Check that the model was correctly loaded\n"
-                        return None, log_messages
-            except Exception as e:
-                self.logger.error(f"Error: {e}")
-                log_messages += f"❌ An Error occured: {e}\n"
-                return None, log_messages
+        # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
+        return output_data[0], self.log_messages
 
     def process_file_and_generate(
         self,
@@ -447,31 +389,42 @@ class AuralisTTSEngine:
         # todo: refactor this to use the document processor object
         if file_input:
             file_extension: str = Path(file_input.name).suffix
-
+            input_text: str = ""
             match file_extension:
                 case ".epub":
-                    input_text: str = extract_text_from_epub(file_input.name)
+                    input_text = extract_text_from_epub(file_input.name)
                 case ".txt" | ".md":
                     input_text = text_from_file(file_input.name)
                 case _:
                     return (
-                        None,
+                        [],
                         "Unsupported file format, it needs to be either .epub or .txt",
                     )
 
-            return self.generate_audio_from_large_text(
-                input_text,
-                ref_audio_files_file,
-                speed_file,
-                enhance_speech_file,
-                temperature_file,
-                top_p_file,
-                top_k_file,
-                repetition_penalty_file,
-                language_file,
+            request = TTSRequest(
+                text=input_text,
+                speaker_files=ref_audio_files_file,
+                stream=False,
+                enhance_speech=enhance_speech_file,
+                temperature=temperature_file,
+                top_p=top_p_file,
+                top_k=top_k_file,
+                repetition_penalty=repetition_penalty_file,
+                language=language_file,
             )
+
+            converted_audio_list = self.generate_audio_from_text(request, speed_file)
+
+            output_data: list[tuple[int, np.ndarray]] = []
+
+            for converted_audio_path in converted_audio_list:
+                audio_data, samplerate = sf.read(converted_audio_path)
+                output_data.append((samplerate, convert_audio_to_int16(audio_data)))
+
+            # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
+            return output_data[0], self.log_messages
         else:
-            return None, "Please provide an .epub or .txt file!"
+            return [], "No document file was provided!"
 
     def process_mic_and_generate(
         self,
@@ -495,19 +448,31 @@ class AuralisTTSEngine:
                 torchaudio.save(
                     str(output_path), torch_audio.unsqueeze(0), mic_ref_audio[0]
                 )
-                return self.process_text_and_generate(
-                    input_text_mic,
-                    [output_path],
-                    speed_mic,
-                    enhance_speech_mic,
-                    temperature_mic,
-                    top_p_mic,
-                    top_k_mic,
-                    repetition_penalty_mic,
-                    language_mic,
+
+                request = TTSRequest(
+                    text=input_text_mic,
+                    speaker_files=output_path,
+                    stream=False,
+                    enhance_speech=enhance_speech_mic,
+                    temperature=temperature_mic,
+                    top_p=top_p_mic,
+                    top_k=top_k_mic,
+                    repetition_penalty=repetition_penalty_mic,
+                    language=language_mic,
                 )
+
+                converted_audio_list = self.generate_audio_from_text(request, speed_mic)
+
+                output_data: list[tuple[int, np.ndarray]] = []
+
+                for converted_audio_path in converted_audio_list:
+                    audio_data, samplerate = sf.read(converted_audio_path)
+                    output_data.append((samplerate, convert_audio_to_int16(audio_data)))
+                # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
+                return output_data[0], self.log_messages
+
             except Exception as e:
                 self.logger.error(f"Error saving audio file: {e}")
-                return None, f"Error saving audio file: {e}"
+                return [], f"Error saving audio file: {e}"
         else:
-            return None, "Please record an audio!"
+            return [], "Please record an audio!"

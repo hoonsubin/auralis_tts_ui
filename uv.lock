@@ -288,12 +288,15 @@ dependencies = [
     { name = "langchain-text-splitters" },
     { name = "markdown" },
     { name = "nest-asyncio" },
+    { name = "numpy" },
     { name = "pdfplumber" },
     { name = "pyrubberband" },
+    { name = "soundfile" },
     { name = "sudachidict-core" },
     { name = "sudachipy" },
     { name = "torch" },
     { name = "torchaudio" },
+    { name = "unidic" },
 ]
 
 [package.metadata]
@@ -306,12 +309,15 @@ requires-dist = [
     { name = "langchain-text-splitters", specifier = ">=0.3.6" },
     { name = "markdown", specifier = ">=3.7" },
     { name = "nest-asyncio", specifier = ">=1.6.0" },
+    { name = "numpy", specifier = ">=1.26.4" },
     { name = "pdfplumber", specifier = ">=0.11.5" },
     { name = "pyrubberband", specifier = ">=0.4.0" },
+    { name = "soundfile", specifier = ">=0.13.1" },
     { name = "sudachidict-core", specifier = ">=20250129" },
     { name = "sudachipy", specifier = ">=0.6.10" },
     { name = "torch", specifier = ">=2.5.1" },
     { name = "torchaudio", specifier = ">=2.5.1" },
+    { name = "unidic", specifier = ">=1.1.0" },
 ]
 
 [[package]]
@@ -2664,6 +2670,15 @@ wheels = [
 ]
 
 [[package]]
+name = "plac"
+version = "1.4.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/79/1edb4c836c69306d0ecb0865f46d62ea7e28ef16b3f95bb394e4f2a46330/plac-1.4.3.tar.gz", hash = "sha256:d4cb3387b2113a28aebd509433d0264a4e5d9bb7c1a86db4fbd0a8f11af74eb3", size = 38984 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8f/af/4c61d2ac0d589719f548f5a1ba919738e44bac7b0c723ce147de5556d233/plac-1.4.3-py2.py3-none-any.whl", hash = "sha256:8a84fde8f950c9de6588a2d53c9deeac3ba1ddb456d887a33228460cf6549750", size = 22458 },
+]
+
+[[package]]
 name = "platformdirs"
 version = "4.3.6"
 source = { registry = "https://pypi.org/simple" }
@@ -4405,6 +4420,18 @@ wheels = [
 ]
 
 [[package]]
+name = "unidic"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "plac" },
+    { name = "requests" },
+    { name = "tqdm" },
+    { name = "wasabi" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/09/271dfbf8d5b56adddc70e30fa94249f5d3ab35f615bf278d65258045564a/unidic-1.1.0.tar.gz", hash = "sha256:0ab91c05de342c84d2a6314901fd3afb9061ecd7534dd4a0431dccbb87d921b7", size = 7688 }
+
+[[package]]
 name = "urllib3"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4521,14 +4548,11 @@ wheels = [
 
 [[package]]
 name = "wasabi"
-version = "1.1.3"
+version = "0.10.1"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ac/f9/054e6e2f1071e963b5e746b48d1e3727470b2a490834d18ad92364929db3/wasabi-1.1.3.tar.gz", hash = "sha256:4bb3008f003809db0c3e28b4daf20906ea871a2bb43f9914197d540f4f2e0878", size = 30391 }
+sdist = { url = "https://files.pythonhosted.org/packages/69/41/0c31737ee1a29c8b829690ebb4ab988b1f489aa2c3efa115a732a9dd7997/wasabi-0.10.1.tar.gz", hash = "sha256:c8e372781be19272942382b14d99314d175518d7822057cb7a97010c4259d249", size = 28380 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/06/7c/34330a89da55610daa5f245ddce5aab81244321101614751e7537f125133/wasabi-1.1.3-py3-none-any.whl", hash = "sha256:f76e16e8f7e79f8c4c8be49b4024ac725713ab10cd7f19350ad18a8e3f71728c", size = 27880 },
+    { url = "https://files.pythonhosted.org/packages/34/74/bd566f876c2de097e75d525c2696fb9829009987a0d93a4fb3576778a0a8/wasabi-0.10.1-py3-none-any.whl", hash = "sha256:fe862cc24034fbc9f04717cd312ab884f71f51a8ecabebc3449b751c2a649d83", size = 26075 },
 ]
 
 [[package]]
