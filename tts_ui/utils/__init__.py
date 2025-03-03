@@ -13,6 +13,17 @@ import bunkai
 import torch
 import torchaudio
 import os
+import hashlib
+
+
+def get_hash_from_data(data: bytes | str, first_chars: int = 8) -> str:
+    data_to_hash: bytes = data if not isinstance(data, str) else data.encode("utf-8")
+
+    # Create a hash object (using SHA-256 for this example)
+    hash_object: hashlib.HASH = hashlib.sha256(data_to_hash)
+
+    # Get the hexadecimal representation of the hash
+    return hash_object.hexdigest()[:first_chars]
 
 
 def shorten_filename(original_path: str, tmp_dir: Path = Path("/tmp/auralis")) -> str:

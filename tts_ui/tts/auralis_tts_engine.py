@@ -10,6 +10,7 @@ from tts_ui.utils import (
     text_from_file,
     convert_audio_to_int16,
     torchaudio_stretch,
+    get_hash_from_data,
 )
 import tempfile
 from tts_ui.utils.doc_processor import DocumentProcessor
@@ -23,9 +24,14 @@ import soundfile as sf
 
 class AuralisTTSEngine:
     def __init__(self):
+        self.session_uid = None
+        # Generate a random hex string to identify this process
+        self._create_new_session_ui()
+
         # create a unique temp file location for this inst
-        tmp_dir = Path(tempfile.mkdtemp())
-        tmp_dir.mkdir(exist_ok=True)
+        tmp_dir_base = Path(tempfile.mkdtemp()).resolve()
+        tmp_dir_base.mkdir(exist_ok=True)
+        self.tmp_dir_base = tmp_dir_base
 
         # Loading the TTS engine first and assign it to the class.
         logger = setup_logger(__file__)
@@ -60,15 +66,18 @@ class AuralisTTSEngine:
         self.tts: TTS = tts
         self.model_path: str = model_path
         self.gpt_model: str = gpt_model
-        self.tmp_dir: Path = tmp_dir
+
         self.doc_processor = DocumentProcessor()
 
-        # Generate a random hex string to identify this process
-        self._create_new_session_ui()
-
     def _create_new_session_ui(self):
-        self.session_uid: str = os.urandom(4).hex()
-        return self.session_uid
+        if self.session_uid is not None:
+            return self.session_uid
+
+        # Generate a random UID to identify this session
+        _gen_uid: str = os.urandom(4).hex()
+        self.session_uid: str = _gen_uid
+
+        return _gen_uid
 
     def generate_audio_from_large_text(
         self,
@@ -91,8 +100,6 @@ class AuralisTTSEngine:
         if not ref_audio:
             log_messages += "Please provide at least one reference audio!\n"
             return None, log_messages
-
-        self._create_new_session_ui()
 
         print(f"Using sample voice from {ref_audio}")
 
@@ -161,7 +168,7 @@ class AuralisTTSEngine:
 
         finally:
             # Clean up all temporary files
-            self._clean_temp_path()
+            # self._clean_temp_work_path()
 
             print("Returning the final audio file")
             # return the final audio
@@ -178,6 +185,9 @@ class AuralisTTSEngine:
         # successful audio chunks
         processed_chunks: list[str] = []
         processed_count = 0
+
+        base_work_dir = self.tmp_dir_base.joinpath("_working/").resolve()
+        base_work_dir.mkdir(exist_ok=True)
 
         # Todo: refactor this to be processed in parallel
         # Process the batch of chunks into audio
@@ -203,21 +213,26 @@ class AuralisTTSEngine:
                         audio: TTSOutput = self.tts.generate_speech(request)
 
                     # Create a unique chunk name that can be sorted alphanumerically
-                    temp_file_path: str = os.path.join(
-                        self.tmp_dir, f"{self.session_uid}_chunk_{idx}.wav"
+                    audio_hash: str = get_hash_from_data(audio.array.tobytes())
+                    chunk_save_path: str = (
+                        base_work_dir.joinpath(f"{audio_hash}_chunk_{idx:03d}.wav")
+                        .resolve()
+                        .as_posix()
                     )
 
-                    self.logger.info(f"Writing the converted chunk to {temp_file_path}")
+                    self.logger.info(
+                        f"Writing the converted chunk to {chunk_save_path}"
+                    )
 
                     # Todo: maybe consider saving as mp3?
                     # Write the converted audio chunk to the disk so we can process them later
                     sf.write(
-                        file=temp_file_path,
+                        file=chunk_save_path,
                         # Convert float16 to int16
                         data=convert_audio_to_int16(audio.array),
                         samplerate=audio.sample_rate,
                     )
-                    processed_chunks.append(temp_file_path)
+                    processed_chunks.append(chunk_save_path)
 
                     processed_count += 1
                     self.logger.info(
@@ -258,18 +273,16 @@ class AuralisTTSEngine:
 
         return processed_chunks, failed_chunks
 
-    def _clean_temp_path(self):
+    def _clean_temp_work_path(self):
         self.logger.info("Performing clean up task")
         # remove and make an empty temp folder
-        shutil.rmtree(self.tmp_dir)
-        self.tmp_dir.mkdir(exist_ok=True)
+        shutil.rmtree(self.tmp_dir_base)
+        self.tmp_dir_base.mkdir(exist_ok=True)
 
-    def _combine_audio(self, chunk_paths: list[str], audio_chunk_size=8192) -> str:
+    def _combine_audio(self, chunk_paths: list[str]) -> str:
         max_size_gb = 3.8
 
         max_size: float = max_size_gb * 1024**3  # Convert GB to bytes
-
-        output_dir: str = os.path.abspath(self.tmp_dir)
 
         combined_output_path: list[str] = []
 
@@ -280,6 +293,12 @@ class AuralisTTSEngine:
             subtype = ref_file.subtype
             format_check = (samplerate, channels, subtype)
 
+            # Initialize output management
+            _tmp_dir_base: Path = self.tmp_dir_base.joinpath("_store/")
+            _tmp_dir_base.mkdir(exist_ok=True)
+
+            head_file_hash = get_hash_from_data(ref_file.name + self.session_uid)
+
         for f in chunk_paths[1:]:
             with sf.SoundFile(f) as test_file:
                 if (
@@ -289,9 +308,6 @@ class AuralisTTSEngine:
                 ) != format_check:
                     raise ValueError(f"Format mismatch in {os.path.basename(f)}")
 
-        # Initialize output management
-        os.makedirs(output_dir, exist_ok=True)
-        output_base = os.path.join(output_dir, "combined")
         output_index = 0
         current_out = None
 
@@ -307,9 +323,15 @@ class AuralisTTSEngine:
                         if current_out:
                             current_out.close()
                         output_index += 1
-                        output_path = (
-                            f"{output_base}_{self.session_uid}_{output_index:03d}.wav"
+
+                        output_path: str = (
+                            _tmp_dir_base.joinpath(
+                                f"combined_{head_file_hash}_{output_index:02d}.wav"
+                            )
+                            .resolve()
+                            .as_posix()
                         )
+
                         current_out = sf.SoundFile(
                             output_path,
                             "w",
@@ -320,6 +342,8 @@ class AuralisTTSEngine:
                         combined_output_path.append(output_path)
 
                     current_out.write(chunk)
+            # Remove the chunk file after processing it
+            os.remove(file_path)
 
         if current_out:
             current_out.close()
@@ -460,7 +484,7 @@ class AuralisTTSEngine:
         if mic_ref_audio:
             data: bytes = str(time.time()).encode("utf-8")
             hash: str = hashlib.sha1(data).hexdigest()[:10]
-            output_path = self.tmp_dir / (f"mic_{hash}.wav")
+            output_path = self.tmp_dir_base.joinpath(f"mic_{hash}.wav")
 
             torch_audio: torch.Tensor = torch.from_numpy(mic_ref_audio[1].astype(float))
             try:
@@ -469,7 +493,7 @@ class AuralisTTSEngine:
                 )
                 return self.process_text_and_generate(
                     input_text_mic,
-                    [Path(output_path)],
+                    [output_path],
                     speed_mic,
                     enhance_speech_mic,
                     temperature_mic,
