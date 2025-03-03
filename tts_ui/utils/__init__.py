@@ -12,24 +12,25 @@ import jaconv
 import bunkai
 import torch
 import torchaudio
-
-# Create a temporary directory to store short-named files
-tmp_dir = Path("/tmp/auralis")
-tmp_dir.mkdir(exist_ok=True)
+import os
 
 
-def shorten_filename(original_path: str) -> str:
+def shorten_filename(original_path: str, tmp_dir: Path = Path("/tmp/auralis")) -> str:
     """
     Copies the given file to a temporary directory with a shorter, random filename.
 
     Args:
         original_path (str): Path to the original file that will be kept in the temp location
+        tmp_dir (Path): The base path that will be used as the temp location. Defaults to `tmp/auralis`
 
     Returns:
         str: The short file path saved in a temporary location
     """
+
+    tmp_dir.mkdir(exist_ok=True)
+    base_name: str = os.path.splitext(os.path.basename(original_path))[0]
     ext: str = Path(original_path).suffix
-    short_name: str = "file_" + uuid.uuid4().hex[:8] + ext
+    short_name: str = f"file_{hash(base_name) + uuid.uuid4().hex[:8] + ext}"
     short_path: Path = tmp_dir / short_name
     shutil.copyfile(original_path, short_path)
     return str(short_path)
@@ -111,6 +112,8 @@ def calculate_byte_size(text: str) -> int:
 def torchaudio_stretch(
     audio_data: np.ndarray, sample_rate: int, speed_factor: float
 ) -> np.ndarray:
+    if speed_factor == 1.0:
+        return audio_data
     audio_tensor = torch.from_numpy(audio_data.astype(np.float32))
 
     # If audio is mono, add batch dimension
@@ -249,8 +252,3 @@ def split_text_into_chunks(
             optimized_list.extend(local_chunk)
 
     return optimized_list
-
-
-def chunk_generator(text: str, chunk_size: int = 608, chunk_overlap: int = 5):
-    for chunk in split_text_into_chunks(text, chunk_size, chunk_overlap):
-        yield chunk
