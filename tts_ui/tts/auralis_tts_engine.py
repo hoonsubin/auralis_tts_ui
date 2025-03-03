@@ -1,4 +1,3 @@
-from typing import Optional
 from auralis import TTS, TTSRequest, TTSOutput, setup_logger
 from gradio import File, Files, Slider
 import numpy as np
@@ -20,8 +19,6 @@ from pathlib import Path
 import os
 import shutil
 import soundfile as sf
-import wave
-import subprocess
 
 
 class AuralisTTSEngine:
@@ -50,7 +47,7 @@ class AuralisTTSEngine:
                 model_name_or_path=model_path,
                 gpt_model=gpt_model,
                 enforce_eager=False,
-                max_concurrency=6,  # need to adjust this based on the host machine or it can cause `AsyncEngineDeadError`
+                max_concurrency=4,  # need to adjust this based on the host machine or it can cause `AsyncEngineDeadError`
             )
 
             logger.info(f"Successfully loaded model {model_path}")
@@ -85,7 +82,9 @@ class AuralisTTSEngine:
         repetition_penalty: float,
         language: str = "auto",
     ):
-        """The main text processing function that can handle text of any size and convert them into a long audio file"""
+        """
+        The main text processing function that can handle text of any size and convert them into a long audio file
+        """
 
         log_messages: str = ""
 
@@ -132,7 +131,7 @@ class AuralisTTSEngine:
         try:
             # Note: This mostly works, but audio format becomes an important factor. We can improve this
             # Note: .wav files cannot be larger than 4gb. Probably good to just make this into a mp3
-            combined_audio_path: list = self._combine_audio(processed_chunk_paths)
+            combined_audio_path: list[str] = self._combine_audio(processed_chunk_paths)
 
             print(
                 f"Reading the combined audio from {combined_audio_path} using Soundfile"

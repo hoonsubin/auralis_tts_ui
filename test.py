@@ -1,26 +1,30 @@
 import gc
 import glob
+from pathlib import Path
 import random
 import soundfile as sf
 import os
-from tts_ui.utils import convert_audio_to_int16
 
 
 def process_all_local_docs():
     from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
 
     tts_engine = AuralisTTSEngine()
-    audio_save_path = "./data/output"
-    base_data_path = "./data"
+    base_path = os.path.abspath("./data")
+    audio_save_path = os.path.join(base_path, "output/")
 
-    all_texts = glob.glob(f"{base_data_path}/docs/**/*.[tm][xd]", recursive=True)
-
-    all_voices = glob.glob(f"{base_data_path}/voices/*.wav", recursive=False)
+    all_texts = glob.glob(base_path + "/docs/*.txt") + glob.glob(
+        base_path + "/docs/*.md"
+    )
+    all_voices = glob.glob("./data/voices/*.wav", recursive=False)
 
     print(f"Found {len(all_texts)} files to process")
 
+    all_texts.sort()
     for index, text_to_process in enumerate(all_texts):
-        random_voice_path: str = os.path.abspath(all_voices[1])
+        random_voice_path: str = os.path.abspath(
+            all_voices[random.randrange(0, len(all_voices) - 1)]
+        )
         abs_text_path: str = os.path.abspath(text_to_process)
 
         print(f"Using {random_voice_path} as sample")
