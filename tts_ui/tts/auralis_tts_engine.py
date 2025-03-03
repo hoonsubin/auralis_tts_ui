@@ -136,7 +136,7 @@ class AuralisTTSEngine:
             # audio_data, sample_rate = sf.read(combined_audio_path[0])
 
             self.log_messages += "✅ Successfully Generated audio\n"
-            self.logger.info(self.log_messages)
+            # self.logger.info(self.log_messages)
 
         except Exception as e:
             self.log_messages += f"❌ Failed to write chunks: {e}"
@@ -365,14 +365,10 @@ class AuralisTTSEngine:
 
         converted_audio_list = self.generate_audio_from_text(request, speed)
 
-        output_data: list[tuple[int, np.ndarray]] = []
-
-        for converted_audio_path in converted_audio_list:
-            audio_data, samplerate = sf.read(converted_audio_path)
-            output_data.append((samplerate, convert_audio_to_int16(audio_data)))
-
+        self.logger.info(self.log_messages)
         # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
-        return output_data[0], self.log_messages
+
+        return converted_audio_list[0], self.log_messages
 
     def process_file_and_generate(
         self,
@@ -415,14 +411,9 @@ class AuralisTTSEngine:
 
             converted_audio_list = self.generate_audio_from_text(request, speed_file)
 
-            output_data: list[tuple[int, np.ndarray]] = []
-
-            for converted_audio_path in converted_audio_list:
-                audio_data, samplerate = sf.read(converted_audio_path)
-                output_data.append((samplerate, convert_audio_to_int16(audio_data)))
-
+            self.logger.info(self.log_messages)
             # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
-            return output_data[0], self.log_messages
+            return converted_audio_list[0], self.log_messages
         else:
             return [], "No document file was provided!"
 
@@ -463,13 +454,9 @@ class AuralisTTSEngine:
 
                 converted_audio_list = self.generate_audio_from_text(request, speed_mic)
 
-                output_data: list[tuple[int, np.ndarray]] = []
-
-                for converted_audio_path in converted_audio_list:
-                    audio_data, samplerate = sf.read(converted_audio_path)
-                    output_data.append((samplerate, convert_audio_to_int16(audio_data)))
+                self.logger.info(self.log_messages)
                 # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
-                return output_data[0], self.log_messages
+                return converted_audio_list[0], self.log_messages
 
             except Exception as e:
                 self.logger.error(f"Error saving audio file: {e}")
