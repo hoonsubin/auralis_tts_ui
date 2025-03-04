@@ -12,7 +12,6 @@ import jaconv
 import bunkai
 import torch
 import torchaudio
-import os
 import hashlib
 
 
@@ -26,22 +25,24 @@ def get_hash_from_data(data: bytes | str, first_chars: int = 8) -> str:
     return hash_object.hexdigest()[:first_chars]
 
 
-def shorten_filename(original_path: str, tmp_dir: Path = Path("/tmp/auralis")) -> str:
+def shorten_filename(original_path: str, tmp_dir: Path = Path("/tmp/uploads")) -> str:
     """
     Copies the given file to a temporary directory with a shorter, random filename.
 
     Args:
         original_path (str): Path to the original file that will be kept in the temp location
-        tmp_dir (Path): The base path that will be used as the temp location. Defaults to `tmp/auralis`
+        tmp_dir (Path): The base path that will be used as the temp location. Defaults to `tmp/uploads`
 
     Returns:
         str: The short file path saved in a temporary location
     """
 
+    file_path = Path(original_path)
+
     tmp_dir.mkdir(exist_ok=True)
-    base_name: str = os.path.splitext(os.path.basename(original_path))[0]
-    ext: str = Path(original_path).suffix
-    short_name: str = f"file_{hash(base_name) + uuid.uuid4().hex[:8] + ext}"
+    base_name: str = file_path.name
+    ext: str = file_path.suffix
+    short_name: str = f"file_{hash(base_name)}_{uuid.uuid4().hex[:8]}{ext}"
     short_path: Path = tmp_dir / short_name
     shutil.copyfile(original_path, short_path)
     return str(short_path)
@@ -203,6 +204,9 @@ def optimize_text_input(
 
     text_to_process: str = text
 
+    # Based on Auralis TTS model
+    max_bytes = 49149
+
     if is_japanese(text_to_process):
         text_to_process = preprocess_japanese_text(text_to_process)
 
@@ -232,7 +236,7 @@ def optimize_text_input(
     if len(text_to_process) > chunk_size:
         # todo: optimize this function so it stores batches locally in the temp folder instead of loading everything in memory
         # todo: implement a tokenized context batch size manager using https://huggingface.co/AstraMindAI/xtts2-gpt/blob/main/tokenizer.py
-        splitter = RecursiveCharacterTextSplitter(
+        langchain_splitter = RecursiveCharacterTextSplitter(
             separators=text_separators,
             chunk_size=chunk_size,  # Optimized for TTS context windows
             chunk_overlap=chunk_overlap,
@@ -240,19 +244,19 @@ def optimize_text_input(
             is_separator_regex=False,
         )
 
-        split_chunks: list[str] = splitter.split_text(text_to_process)
-
-        splitter = bunkai.Bunkai()
+        split_chunks: list[str] = langchain_splitter.split_text(text_to_process)
 
         for current_text in split_chunks:
             # add the text if it's shorter than the max chunk size
-            if len(current_text) <= chunk_size:
+            # Todo: this has to be further optimized since we flipflop between bytes and char sizes
+            if calculate_byte_size(current_text) < max_bytes:
                 optimized_list.append(current_text)
             else:
                 local_chunk: list[str] = []
                 print(f"Found a large chunk: {current_text}")
                 # further split the chunk
                 if is_japanese(current_text):
+                    splitter = bunkai.Bunkai()
                     for local_batch in splitter(current_text):
                         local_chunk.append(local_batch)
                 else:
@@ -262,7 +266,7 @@ def optimize_text_input(
                         local_chunk.append(local_batch)
 
                 optimized_list.extend(local_chunk)
-        else:
-            optimized_list.append(text_to_process)
+    else:
+        optimized_list.append(text_to_process)
 
     return optimized_list

@@ -1,9 +1,17 @@
 import gc
-import time
 import random
-import soundfile as sf
+import shutil
 import os
 from pathlib import Path
+from auralis import TTSRequest
+
+# Note: Only for debugging!
+# This (hopefully) prevents lambda pickling or illegal CUDA memory access error.
+# This forces synchronous execution. But it's VERY slow!
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TORCH_USE_CUDA_DSA"] = "1"
+os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "1"
 
 
 def process_all_local_docs():
@@ -38,10 +46,10 @@ def process_all_local_docs():
 
         print(f"Converting {current_doc_path}")
 
-        (sample_rate, audio_data), log = tts_engine.generate_audio_from_large_text(
-            input_full_text=text_content,
-            ref_audio=[str(random_voice_path)],
-            speed=1.0,
+        request = TTSRequest(
+            text=text_content,
+            speaker_files=[str(random_voice_path)],
+            stream=False,
             enhance_speech=True,
             temperature=0.6,
             top_p=0.65,
@@ -49,28 +57,28 @@ def process_all_local_docs():
             repetition_penalty=4.5,
             language="auto",
         )
-        print(log)
 
-        audio_file_name = f"{doc_name}.mp3"
+        converted_audio_list = tts_engine._generate_audio_from_text(
+            request=request, speed=1.1
+        )
+
+        print(tts_engine.log_messages)
+
+        audio_file_name = f"{doc_name}.wav"
 
         # Note: The program halts here as it takes a lot of memory to perform this
         save_path: Path = audio_save_path.joinpath(audio_file_name)
 
-        sf.write(
-            file=str(save_path),
-            data=audio_data,
-            samplerate=sample_rate,
-        )
+        for audio_output in converted_audio_list:
+            shutil.copyfile(audio_output, save_path)
 
         print(
             f"Finished processing {index + 1} files out of {len(all_texts)}.\nSaved to {save_path}."
         )
+
         print("Cleaning up task")
         # Add manual garbage collection
-        del audio_data
         gc.collect()
-        print("Waiting for 5 seconds to cool off the engine...")
-        time.sleep(5)
 
 
 def main():
