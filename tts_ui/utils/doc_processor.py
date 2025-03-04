@@ -1,9 +1,10 @@
 import markdown
 import pdfplumber
 from pathlib import Path
-from tts_ui.utils import split_text_into_chunks, extract_text_from_epub, text_from_file
+from tts_ui.utils import optimize_text_input, extract_text_from_epub, text_from_file
 
 
+# Todo: work on this and migrate from the TTS Engine class
 class DocumentProcessor:
     def __init__(self, max_word_chunk_size=4000):
         self.max_word_chunk_size: int = max_word_chunk_size  # Characters per chunk
@@ -22,10 +23,10 @@ class DocumentProcessor:
             case "txt":
                 return self._process_text(file_path)
             case _:
-                raise Exception(f"No file found in {file_path}")
+                raise Exception(f"File {file_path} is not supported")
 
     def _process_pdf(self, file_path: str) -> list[str]:
-        text = ""
+        text: str = ""
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
                 text += page.extract_text() + "\n"
@@ -45,4 +46,4 @@ class DocumentProcessor:
         return self._chunk_text(text)
 
     def _chunk_text(self, text: str) -> list[str]:
-        return split_text_into_chunks(text, self.max_word_chunk_size)
+        return optimize_text_input(text, self.max_word_chunk_size)

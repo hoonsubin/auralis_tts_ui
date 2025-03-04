@@ -1,10 +1,12 @@
 import gradio as gr
-from tts_ui.utils import *
 from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
 
 
 supported_langs: list[str] = [
+    "auto",
     "en",
+    "ko",
+    "ja",
     "es",
     "fr",
     "de",
@@ -18,17 +20,21 @@ supported_langs: list[str] = [
     "ar",
     "zh-cn",
     "hu",
-    "ko",
-    "ja",
     "hi",
-    "auto",
 ]
+
+default_values: dict[str, float] = {
+    "playback_speed": 1.0,
+    "temperature": 0.6,
+    "top_p": 0.65,
+    "top_k": 30,
+    "repetition_penalty": 4.5,
+}
 
 
 def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
     """Builds and launches the Gradio UI for Auralis."""
-    with gr.Blocks(title="Auralis TTS UI", theme="soft") as ui:
-
+    with gr.Blocks(title="GPT-TTS UI - Clone any voice", theme="soft") as ui:
         gr.Markdown(
             """
           # Text-to-Speech Interface
@@ -49,39 +55,43 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                     ref_audio_files = gr.Files(
                         label="Reference Audio Files", file_types=["audio"]
                     )
-                    with gr.Accordion("Advanced settings", open=False):
+                    with gr.Accordion("Advanced settings", open=True):
                         speed = gr.Slider(
                             label="Playback speed",
                             minimum=0.5,
                             maximum=2.0,
-                            value=1.0,
+                            value=default_values["playback_speed"],
                             step=0.1,
                         )
                         enhance_speech = gr.Checkbox(
-                            label="Enhance Reference Speech", value=False
+                            label="Enhance Reference Speech", value=True
                         )
                         temperature = gr.Slider(
                             label="Temperature",
                             minimum=0.5,
                             maximum=1.0,
-                            value=0.75,
+                            value=default_values["temperature"],
                             step=0.05,
                         )
                         top_p = gr.Slider(
                             label="Top P",
                             minimum=0.5,
                             maximum=1.0,
-                            value=0.85,
+                            value=default_values["top_p"],
                             step=0.05,
                         )
                         top_k = gr.Slider(
-                            label="Top K", minimum=0, maximum=100, value=50, step=10
+                            label="Top K",
+                            minimum=0,
+                            maximum=100,
+                            value=default_values["top_k"],
+                            step=10,
                         )
                         repetition_penalty = gr.Slider(
                             label="Repetition penalty",
                             minimum=1.0,
                             maximum=10.0,
-                            value=5.0,
+                            value=default_values["repetition_penalty"],
                             step=0.5,
                         )
                         language = gr.Dropdown(
@@ -91,7 +101,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                     generate_button = gr.Button("Generate Speech")
                 with gr.Column():
-                    audio_output = gr.Audio(label="Generated Audio")
+                    audio_output = gr.Audio(label="Generated Audio", type="filepath")
                     log_output = gr.Text(label="Log Output")
 
             generate_button.click(
@@ -119,39 +129,43 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                     ref_audio_files_file = gr.Files(
                         label="Reference Audio Files", file_types=["audio"]
                     )
-                    with gr.Accordion("Advanced settings", open=False):
+                    with gr.Accordion("Advanced settings", open=True):
                         speed_file = gr.Slider(
                             label="Playback speed",
                             minimum=0.5,
                             maximum=2.0,
-                            value=1.0,
+                            value=default_values["playback_speed"],
                             step=0.1,
                         )
                         enhance_speech_file = gr.Checkbox(
-                            label="Enhance Reference Speech", value=False
+                            label="Enhance Reference Speech", value=True
                         )
                         temperature_file = gr.Slider(
                             label="Temperature",
                             minimum=0.5,
                             maximum=1.0,
-                            value=0.75,
+                            value=default_values["temperature"],
                             step=0.05,
                         )
                         top_p_file = gr.Slider(
                             label="Top P",
                             minimum=0.5,
                             maximum=1.0,
-                            value=0.85,
+                            value=default_values["top_p"],
                             step=0.05,
                         )
                         top_k_file = gr.Slider(
-                            label="Top K", minimum=0, maximum=100, value=50, step=10
+                            label="Top K",
+                            minimum=0,
+                            maximum=100,
+                            value=default_values["top_k"],
+                            step=10,
                         )
                         repetition_penalty_file = gr.Slider(
                             label="Repetition penalty",
                             minimum=1.0,
                             maximum=10.0,
-                            value=5.0,
+                            value=default_values["repetition_penalty"],
                             step=0.5,
                         )
                         language_file = gr.Dropdown(
@@ -161,7 +175,9 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                     generate_button_file = gr.Button("Generate Speech from File")
                 with gr.Column():
-                    audio_output_file = gr.Audio(label="Generated Audio")
+                    audio_output_file = gr.Audio(
+                        label="Generated Audio", type="filepath"
+                    )
                     log_output_file = gr.Text(label="Log Output")
 
             generate_button_file.click(
@@ -191,12 +207,12 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         label="Record Reference Audio", sources=["microphone"]
                     )
 
-                    with gr.Accordion("Advanced settings", open=False):
+                    with gr.Accordion("Advanced settings", open=True):
                         speed_mic = gr.Slider(
                             label="Playback speed",
                             minimum=0.5,
                             maximum=2.0,
-                            value=1.0,
+                            value=default_values["playback_speed"],
                             step=0.1,
                         )
                         enhance_speech_mic = gr.Checkbox(
@@ -206,24 +222,28 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                             label="Temperature",
                             minimum=0.5,
                             maximum=1.0,
-                            value=0.75,
+                            value=default_values["temperature"],
                             step=0.05,
                         )
                         top_p_mic = gr.Slider(
                             label="Top P",
                             minimum=0.5,
                             maximum=1.0,
-                            value=0.85,
+                            value=default_values["top_p"],
                             step=0.05,
                         )
                         top_k_mic = gr.Slider(
-                            label="Top K", minimum=0, maximum=100, value=50, step=10
+                            label="Top K",
+                            minimum=0,
+                            maximum=100,
+                            value=default_values["top_k"],
+                            step=10,
                         )
                         repetition_penalty_mic = gr.Slider(
                             label="Repetition penalty",
                             minimum=1.0,
                             maximum=10.0,
-                            value=5.0,
+                            value=default_values["repetition_penalty"],
                             step=0.5,
                         )
                         language_mic = gr.Dropdown(
@@ -233,7 +253,9 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                         )
                     generate_button_mic = gr.Button("Generate Speech")
                 with gr.Column():
-                    audio_output_mic = gr.Audio(label="Generated Audio")
+                    audio_output_mic = gr.Audio(
+                        label="Generated Audio", type="filepath"
+                    )
                     log_output_mic = gr.Text(label="Log Output")
 
             generate_button_mic.click(
