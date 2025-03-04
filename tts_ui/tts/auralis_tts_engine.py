@@ -99,9 +99,7 @@ class AuralisTTSEngine:
         # Todo: refactor this to be processed in parallel
         # Process the batch of chunks into audio
         for idx, chunk in enumerate(chunks_to_process):
-            self.logger.info(
-                f"Processing {calculate_byte_size(chunk)} bytes of text:\n{chunk}"
-            )
+            self.logger.info(f"Processing {calculate_byte_size(chunk)} bytes of text.")
 
             request = TTSRequest(
                 text=chunk,
