@@ -20,6 +20,7 @@ from pathlib import Path
 import os
 import shutil
 import soundfile as sf
+import gc
 
 
 class AuralisTTSEngine:
@@ -93,7 +94,7 @@ class AuralisTTSEngine:
         processed_chunks: list[str] = []
         processed_count = 0
 
-        base_work_dir = self.tmp_dir_base.joinpath("_working/").resolve()
+        base_work_dir: Path = self.tmp_dir_base.joinpath("_working/").resolve()
         base_work_dir.mkdir(exist_ok=True)
 
         # Todo: refactor this to be processed in parallel
@@ -272,7 +273,7 @@ class AuralisTTSEngine:
         return combined_output_path
 
     def _generate_audio_from_text(
-        self, request: TTSRequest, speed: float = 1.0, chunk_size=1000
+        self, request: TTSRequest, speed: float = 1.0, chunk_size=600
     ):
         """
         The main text processing function that can handle text of any size and convert them into a long audio file.
@@ -319,16 +320,6 @@ class AuralisTTSEngine:
                 > 1  # Only process if there are more than one audio chunks
                 else processed_chunk_paths
             )
-
-            print(
-                f"Reading the combined audio from {combined_audio_path} using Soundfile"
-            )
-
-            # Todo: This consumes a lot of memory.
-            # Todo: Properly handle multiple outputs when the audio is too large
-            # Read the exported audio file again
-            # audio_data, sample_rate = sf.read(combined_audio_path[0])
-
             self.log_messages += "✅ Successfully Generated audio\n"
             # self.logger.info(self.log_messages)
 
@@ -338,6 +329,8 @@ class AuralisTTSEngine:
 
         finally:
             print("Returning the final audio file")
+            # Add manual garbage collection
+            gc.collect()
             # return the final audio
             return combined_audio_path
 
@@ -370,8 +363,8 @@ class AuralisTTSEngine:
         converted_audio_list = self._generate_audio_from_text(request, speed)
 
         self.logger.info(self.log_messages)
-        # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
 
+        # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
         return converted_audio_list[0], self.log_messages
 
     def process_file_and_generate(
@@ -416,6 +409,7 @@ class AuralisTTSEngine:
             converted_audio_list = self._generate_audio_from_text(request, speed_file)
 
             self.logger.info(self.log_messages)
+
             # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
             return converted_audio_list[0], self.log_messages
         else:
@@ -461,6 +455,7 @@ class AuralisTTSEngine:
                 )
 
                 self.logger.info(self.log_messages)
+
                 # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
                 return converted_audio_list[0], self.log_messages
 

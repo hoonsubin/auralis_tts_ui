@@ -21,19 +21,22 @@ def process_all_local_docs():
 
     base_path = Path("./data/")
     audio_save_path = base_path.joinpath("output/").resolve()
+    audio_save_path.mkdir(exist_ok=True)
 
     doc_base_path = base_path.joinpath("docs/")
 
-    all_texts = list(doc_base_path.rglob("*.txt")) + list(doc_base_path.rglob("*.md"))
+    all_texts: list[Path] = list(doc_base_path.rglob("*.txt")) + list(
+        doc_base_path.rglob("*.md")
+    )
     all_voices = list(base_path.joinpath("voices").glob("*.wav"))
 
-    print(f"Found {len(all_texts)} doc files and {len(all_voices)} to process")
+    print(f"Found {len(all_texts)} doc files and {len(all_voices)} voices to process")
 
     all_texts.sort()
     for index, text_to_process in enumerate(all_texts):
-        current_doc_path = text_to_process.resolve()
+        current_doc_path: Path = text_to_process.resolve()
 
-        random_voice_path = all_voices[
+        random_voice_path: Path = all_voices[
             random.randrange(0, len(all_voices) - 1)
         ].resolve()
 
@@ -77,8 +80,6 @@ def process_all_local_docs():
         )
 
         print("Cleaning up task")
-        # Add manual garbage collection
-        gc.collect()
 
 
 def main():
