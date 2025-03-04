@@ -32,7 +32,7 @@ default_values: dict[str, float] = {
 }
 
 
-def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
+async def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
     """Builds and launches the Gradio UI for Auralis."""
     with gr.Blocks(title="GPT-TTS UI - Clone any voice", theme="soft") as ui:
         gr.Markdown(

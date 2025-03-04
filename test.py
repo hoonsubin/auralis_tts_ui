@@ -1,20 +1,20 @@
-import gc
 import random
 import shutil
 import os
 from pathlib import Path
 from auralis import TTSRequest
+import asyncio
 
 # Note: Only for debugging!
 # This (hopefully) prevents lambda pickling or illegal CUDA memory access error.
 # This forces synchronous execution. But it's VERY slow!
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["TORCH_USE_CUDA_DSA"] = "1"
 os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "1"
 
 
-def process_all_local_docs():
+async def process_all_local_docs():
     from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
 
     tts_engine = AuralisTTSEngine()
@@ -23,7 +23,7 @@ def process_all_local_docs():
     audio_save_path = base_path.joinpath("output/").resolve()
     audio_save_path.mkdir(exist_ok=True)
 
-    doc_base_path = base_path.joinpath("docs/")
+    doc_base_path: Path = base_path.joinpath("docs/")
 
     all_texts: list[Path] = list(doc_base_path.rglob("*.txt")) + list(
         doc_base_path.rglob("*.md")
@@ -61,7 +61,7 @@ def process_all_local_docs():
             language="auto",
         )
 
-        converted_audio_list = tts_engine._generate_audio_from_text(
+        converted_audio_list = await tts_engine._generate_audio_from_text(
             request=request, speed=1.1
         )
 
@@ -82,10 +82,9 @@ def process_all_local_docs():
         print("Cleaning up task")
 
 
-def main():
-    process_all_local_docs()
+async def main():
+    await process_all_local_docs()
 
 
 if __name__ == "__main__":
-    # asyncio.run(main())
-    main()
+    asyncio.run(main())

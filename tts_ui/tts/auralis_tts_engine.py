@@ -1,4 +1,4 @@
-from auralis import TTS, TTSRequest, TTSOutput, setup_logger
+from auralis import TTS, TTSRequest, TTSOutput, setup_logger, AudioPreprocessingConfig
 from gradio import File, Files, Slider
 import numpy as np
 import torch
@@ -21,6 +21,10 @@ import os
 import shutil
 import soundfile as sf
 import gc
+import asyncio
+import nest_asyncio
+
+nest_asyncio.apply()
 
 
 class AuralisTTSEngine:
@@ -81,117 +85,116 @@ class AuralisTTSEngine:
 
         return _gen_uid
 
-    def _process_text_in_chunks(
+    @torch.no_grad()
+    async def _process_text_in_chunks(
         self,
         chunks_to_process: list[str],
         tts_req: TTSRequest,
         speed: float = 1.0,
         max_retry=5,
     ):
-        # failed text chunks
-        failed_chunks: list[tuple[int, str]] = []
-        # successful audio chunks
-        processed_chunks: list[str] = []
-        processed_count = 0
-
         base_work_dir: Path = self.tmp_dir_base.joinpath("_working/").resolve()
         base_work_dir.mkdir(exist_ok=True)
 
-        # Todo: refactor this to be processed in parallel
-        # Process the batch of chunks into audio
-        for idx, chunk in enumerate(chunks_to_process):
-            self.logger.info(f"Processing {calculate_byte_size(chunk)} bytes of text.")
+        # Todo: might want to pull this out and make it an argument
+        audio_config = AudioPreprocessingConfig(
+            normalize=True,
+            trim_silence=True,
+            enhance_speech=tts_req.enhance_speech,
+            enhance_amount=1.5 if tts_req.enhance_speech else 1,
+        )
 
-            request = TTSRequest(
+        # processed_items: int = 0
+
+        async def _process_and_save_chunk(req: TTSRequest, chunk_id: int) -> str:
+            audio: TTSOutput = await self.tts.generate_speech_async(req)
+            final_audio_data: np.ndarray = audio.array
+
+            # Might be slower to process her chunk, but better than having to load gb of combined audio at once
+            if speed != 1:
+                final_audio_data = torchaudio_stretch(
+                    audio_data=audio.array,
+                    sample_rate=audio.sample_rate,
+                    speed_factor=speed,
+                )
+                self.logger.info(f"Adjusting the final audio speed value by {speed}")
+
+            # Create a unique chunk name that can be sorted alphanumerically
+            audio_hash: str = get_hash_from_data(final_audio_data.tobytes())
+            chunk_save_path: str = (
+                base_work_dir.joinpath(
+                    f"chunk_{chunk_id:03d}_{self.session_uid}_{audio_hash}.wav"
+                )
+                .resolve()
+                .as_posix()
+            )
+
+            self.logger.info(f"Writing the converted chunk to {chunk_save_path}")
+
+            # Todo: maybe consider saving as mp3?
+            # Write the converted audio chunk to the disk so we can process them later
+            sf.write(
+                file=chunk_save_path,
+                # Convert float16 to int16
+                data=convert_audio_to_int16(final_audio_data),
+                samplerate=audio.sample_rate,
+            )
+
+            # processed_items += 1
+
+            # # Clean up GPU memory for every 10 chunks
+            # if (processed_items) % 10 == 0:
+            #     self.logger.info("Emptying GPU cache")
+            #     torch.cuda.empty_cache()  # If using GPU
+
+            return chunk_save_path
+
+        all_reqs = [
+            TTSRequest(
                 text=chunk,
                 speaker_files=tts_req.speaker_files,
                 stream=tts_req.stream,
                 enhance_speech=tts_req.enhance_speech,
+                audio_config=audio_config,
                 temperature=tts_req.temperature,
                 top_p=tts_req.top_p,
                 top_k=tts_req.top_k,
                 repetition_penalty=tts_req.repetition_penalty,
                 language=tts_req.language,
             )
-            current_attempts = 0
-            can_retry: bool = current_attempts <= max_retry
+            for chunk in chunks_to_process
+        ]
 
-            while can_retry:
-                try:
-                    with torch.no_grad():
-                        audio: TTSOutput = self.tts.generate_speech(request)
+        coroutines = [
+            _process_and_save_chunk(req, idx) for idx, req in enumerate(all_reqs)
+        ]
+        outputs = await asyncio.gather(*coroutines, return_exceptions=True)
+        self.logger.info(
+            f"Finished converting all {len(chunks_to_process)} text chunks to audio"
+        )
 
-                        final_audio_data: np.ndarray = audio.array
+        # failed text chunks
+        failed_chunks: list[Exception] = []
+        # successful audio chunks
+        processed_chunks: list[str] = []
 
-                        # Might be slower to process her chunk, but better than having to load gb of audio at once
-                        if speed != 1:
-                            final_audio_data = torchaudio_stretch(
-                                audio_data=audio.array,
-                                sample_rate=audio.sample_rate,
-                                speed_factor=speed,
-                            )
-                            self.logger.info(
-                                f"Adjusting the final audio speed value by {speed}"
-                            )
+        for chunk_output in outputs:
+            if isinstance(chunk_output, Exception):
+                print(f"Found exception of {chunk_output}")
+                # Todo: implement a retry mechanism for failed processes
+                failed_chunks.append(chunk_output)
+            else:
+                processed_chunks.append(chunk_output)
 
-                    # Create a unique chunk name that can be sorted alphanumerically
-                    audio_hash: str = get_hash_from_data(final_audio_data.tobytes())
-                    chunk_save_path: str = (
-                        base_work_dir.joinpath(f"{audio_hash}_chunk_{idx:03d}.wav")
-                        .resolve()
-                        .as_posix()
-                    )
-
-                    self.logger.info(
-                        f"Writing the converted chunk to {chunk_save_path}"
-                    )
-
-                    # Todo: maybe consider saving as mp3?
-                    # Write the converted audio chunk to the disk so we can process them later
-                    sf.write(
-                        file=chunk_save_path,
-                        # Convert float16 to int16
-                        data=convert_audio_to_int16(final_audio_data),
-                        samplerate=audio.sample_rate,
-                    )
-                    processed_chunks.append(chunk_save_path)
-
-                    processed_count += 1
-                    self.logger.info(
-                        f"Processed {idx + 1} chunks out of {len(chunks_to_process)}"
-                    )
-
-                    # Clean up GPU memory for every 10 chunks
-                    if (idx + 1) % 10 == 0:
-                        self.logger.info("Emptying GPU cache")
-                        torch.cuda.empty_cache()  # If using GPU
-
-                    # Break out of the while loop and continue with the next chunk
-                    break
-
-                except Exception as e:
-                    # Retry the chunk process until the retry limit
-                    if not can_retry:
-                        # Add this chunk to the error list and move on to the next chunk
-                        failed_chunks.append((idx, str(e)))
-                        self.logger.warning(
-                            f"⚠️ Exceeded max retries for chunk {idx + 1}"
-                        )
-                        break
-
-                    # Retry the chunk after a waiting period
-                    current_attempts += 1
-                    wait_time = 2 ** (current_attempts - 1)  # Exponential backoff
-                    self.logger.warning(
-                        f"⚠️ Failed chunk {idx + 1}: {str(e)}.\nRetrying in {wait_time}s..."
-                    )
-                    time.sleep(wait_time)
-                    # Better to be explicit
-                    continue
+        if torch.cuda.is_available():
+            self.logger.info("Emptying GPU cache")
+            torch.cuda.empty_cache()
 
         # If the entire process failed
-        if processed_count == 0:
+        if len(processed_chunks) == 0:
             raise Exception("❌ All chunk processing failed")
+
+        processed_chunks.sort()
 
         return processed_chunks, failed_chunks
 
@@ -272,7 +275,7 @@ class AuralisTTSEngine:
 
         return combined_output_path
 
-    def _generate_audio_from_text(
+    async def _generate_audio_from_text(
         self, request: TTSRequest, speed: float = 1.0, chunk_size=600
     ):
         """
@@ -298,7 +301,7 @@ class AuralisTTSEngine:
         print(f"Created {len(chunks_to_process)} chunks")
 
         # Note: This could be done in parallel, but it works in most cases without issues (albeit very slow)
-        processed_chunk_paths, failed_chunks = self._process_text_in_chunks(
+        processed_chunk_paths, failed_chunks = await self._process_text_in_chunks(
             chunks_to_process=chunks_to_process, tts_req=request, speed=speed
         )
 
@@ -334,7 +337,7 @@ class AuralisTTSEngine:
             # return the final audio
             return combined_audio_path
 
-    def process_text_and_generate(
+    async def process_text_and_generate(
         self,
         input_text: str,
         ref_audio_files: str | list[str] | bytes | list[bytes],
@@ -360,14 +363,14 @@ class AuralisTTSEngine:
             language=language,
         )
 
-        converted_audio_list = self._generate_audio_from_text(request, speed)
+        converted_audio_list = await self._generate_audio_from_text(request, speed)
 
         self.logger.info(self.log_messages)
 
         # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
         return converted_audio_list[0], self.log_messages
 
-    def process_file_and_generate(
+    async def process_file_and_generate(
         self,
         file_input: File,
         ref_audio_files_file: Files,
@@ -406,7 +409,9 @@ class AuralisTTSEngine:
                 language=language_file,
             )
 
-            converted_audio_list = self._generate_audio_from_text(request, speed_file)
+            converted_audio_list = await self._generate_audio_from_text(
+                request, speed_file
+            )
 
             self.logger.info(self.log_messages)
 
@@ -415,7 +420,7 @@ class AuralisTTSEngine:
         else:
             return [], "No document file was provided!"
 
-    def process_mic_and_generate(
+    async def process_mic_and_generate(
         self,
         input_text_mic,
         mic_ref_audio,
@@ -450,7 +455,7 @@ class AuralisTTSEngine:
                     language=language_mic,
                 )
 
-                converted_audio_list = self._generate_audio_from_text(
+                converted_audio_list = await self._generate_audio_from_text(
                     request, speed_mic
                 )
 
