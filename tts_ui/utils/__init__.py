@@ -13,6 +13,7 @@ import bunkai
 import torch
 import torchaudio
 import hashlib
+import chardet
 
 
 def get_hash_from_data(data: bytes | str, first_chars: int = 8) -> str:
@@ -109,9 +110,27 @@ def extract_text_from_epub(epub_path: str, output_path=None) -> str:
 def text_from_file(txt_file_path: str) -> str:
     # Shorten filename before reading
     txt_short_path: str = shorten_filename(txt_file_path)
-    with open(txt_short_path, "r") as f:
-        text: str = f.read()
-    return text
+
+    # First detect encoding using binary read
+    with open(txt_short_path, "rb") as f:
+        raw_data = f.read()
+        detected = chardet.detect(raw_data)
+
+    # Try detected encoding
+    try:
+        return raw_data.decode(detected["encoding"]).strip()
+    except (UnicodeDecodeError, LookupError):
+        pass
+
+    # Fallback to common encodings
+    for encoding in ["utf-8", "windows-1252", "iso-8859-1", "cp1252"]:
+        try:
+            return raw_data.decode(encoding).strip()
+        except UnicodeDecodeError:
+            continue
+
+    # Final fallback with error replacement
+    return raw_data.decode("utf-8", errors="replace").strip()
 
 
 def clone_voice(audio_path: str) -> str:

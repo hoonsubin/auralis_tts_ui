@@ -35,38 +35,6 @@ default_values: dict[str, float] = {
 def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
     """Builds and launches the Gradio UI for Auralis."""
 
-    # def process_text_and_generate(*args):
-    #     # Create a new event loop for this thread
-    #     loop = asyncio.new_event_loop()
-    #     asyncio.set_event_loop(loop)
-    #     try:
-    #         # Run the async function in this loop
-    #         return loop.run_until_complete(tts_engine.process_text_and_generate(*args))
-    #     finally:
-    #         loop.close()
-
-    # def process_file_and_generate(*args):
-    #     # Create a new event loop for this thread
-    #     loop = asyncio.new_event_loop()
-    #     asyncio.set_event_loop(loop)
-    #     try:
-    #         # Run the async function in this loop
-    #         return loop.run_until_complete(tts_engine.process_file_and_generate(*args))
-    #     finally:
-    #         loop.close()
-
-    # def process_mic_and_generate(*args):
-    #     # Create a new event loop for this thread
-    #     loop = asyncio.new_event_loop()
-    #     tts_engine.process_file_and_generate
-    #     tts_engine.process_mic_and_generate
-    #     asyncio.set_event_loop(loop)
-    #     try:
-    #         # Run the async function in this loop
-    #         return loop.run_until_complete(tts_engine.process_mic_and_generate(*args))
-    #     finally:
-    #         loop.close()
-
     with gr.Blocks(title="GPT-TTS UI - Clone any voice", theme="soft") as ui:
         gr.Markdown(
             """

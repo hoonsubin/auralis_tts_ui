@@ -5,6 +5,7 @@ from pathlib import Path
 from auralis import TTSRequest
 import asyncio
 import nest_asyncio
+from tts_ui.utils import text_from_file
 
 nest_asyncio.apply()
 
@@ -37,8 +38,7 @@ async def process_all_local_docs():
 
         print(f"Using {random_voice_path} as sample")
 
-        with open(current_doc_path, "r", encoding="utf-8") as f:
-            text_content: str = f.read()
+        text_content = text_from_file(current_doc_path)
 
         doc_name: str = os.path.splitext(os.path.basename(str(current_doc_path)))[0]
 

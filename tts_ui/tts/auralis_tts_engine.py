@@ -69,7 +69,7 @@ class AuralisTTSEngine:
                 model_name_or_path=model_path,
                 gpt_model=gpt_model,
                 enforce_eager=False,
-                scheduler_max_concurrency=4,
+                max_concurrency=3,
             )
 
             logger.info(f"Successfully loaded model {model_path}")

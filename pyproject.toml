@@ -8,6 +8,7 @@ dependencies = [
     "auralis>=0.2.8.post2",
     "bs4>=0.0.2",
     "bunkai>=1.5.7",
+    "chardet>=5.2.0",
     "gradio>=5.17.1",
     "jaconv>=0.4.0",
     "langchain-text-splitters>=0.3.6",
