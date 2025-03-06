@@ -10,7 +10,7 @@ from tts_ui.utils import (
     convert_audio_to_int16,
     torchaudio_stretch,
     get_hash_from_data,
-    calculate_byte_size,
+    print_memory_summary,
 )
 import tempfile
 from tts_ui.utils.doc_processor import DocumentProcessor
@@ -22,13 +22,24 @@ import shutil
 import soundfile as sf
 import gc
 import asyncio
-import nest_asyncio
-
-nest_asyncio.apply()
 
 
 class AuralisTTSEngine:
     def __init__(self):
+        """
+        Initialize the TTS engine with necessary configurations.
+
+        This function sets up:
+        - A unique session identifier for tracking
+        - Temporary directories for processing files
+        - The text-to-speech model using specified parameters
+
+        Parameters:
+            None (all settings are hardcoded or generated internally)
+
+        Returns:
+            None
+        """
         self.session_uid = None
         # Generate a random hex string to identify this process
         self._create_new_session_ui()
@@ -58,6 +69,7 @@ class AuralisTTSEngine:
                 model_name_or_path=model_path,
                 gpt_model=gpt_model,
                 enforce_eager=False,
+                scheduler_max_concurrency=4,
             )
 
             logger.info(f"Successfully loaded model {model_path}")
@@ -75,7 +87,16 @@ class AuralisTTSEngine:
 
         self.doc_processor = DocumentProcessor()
 
-    def _create_new_session_ui(self):
+    def _create_new_session_ui(self) -> str:
+        """
+        Generate a unique session identifier for the current process.
+
+        This function creates a random hexadecimal string to identify the session.
+        If a session UID already exists, it will be returned instead of generating a new one.
+
+        Returns:
+            str: Unique session identifier
+        """
         if self.session_uid is not None:
             return self.session_uid
 
@@ -92,7 +113,25 @@ class AuralisTTSEngine:
         tts_req: TTSRequest,
         speed: float = 1.0,
         max_retry=5,
-    ):
+    ) -> tuple[list[str], list[Exception]]:
+        """
+        Process text chunks asynchronously and convert them to audio files.
+
+        This method splits the input text into manageable chunks, processes each chunk
+        using the TTS engine, adjusts the audio speed if specified, and saves the output
+        as separate audio files. Failed chunks are collected for potential retrying.
+
+        Parameters:
+            chunks_to_process (list[str]): List of text chunks to process
+            tts_req (TTSRequest): Configuration parameters for TTS generation
+            speed (float, optional): Speed adjustment factor for audio (default: 1.0)
+            max_retry (int, optional): Number of retry attempts per chunk (not used yet)
+
+        Returns:
+            tuple[list[str], list[Exception]]: A tuple containing:
+                - List of successfully processed audio file paths
+                - List of exceptions encountered during processing
+        """
         base_work_dir: Path = self.tmp_dir_base.joinpath("_working/").resolve()
         base_work_dir.mkdir(exist_ok=True)
 
@@ -104,50 +143,60 @@ class AuralisTTSEngine:
             enhance_amount=1.5 if tts_req.enhance_speech else 1,
         )
 
-        # processed_items: int = 0
+        self.processed_items: int = 0
 
         async def _process_and_save_chunk(req: TTSRequest, chunk_id: int) -> str:
-            audio: TTSOutput = await self.tts.generate_speech_async(req)
-            final_audio_data: np.ndarray = audio.array
+            try:
+                audio: TTSOutput = await self.tts.generate_speech_async(req)
+                final_audio_data: np.ndarray = audio.array
 
-            # Might be slower to process her chunk, but better than having to load gb of combined audio at once
-            if speed != 1:
-                final_audio_data = torchaudio_stretch(
-                    audio_data=audio.array,
-                    sample_rate=audio.sample_rate,
-                    speed_factor=speed,
+                # Might be slower to process her chunk, but better than having to load gb of combined audio at once
+                if speed != 1:
+                    final_audio_data = torchaudio_stretch(
+                        audio_data=audio.array,
+                        sample_rate=audio.sample_rate,
+                        speed_factor=speed,
+                    )
+                    self.logger.info(
+                        f"Adjusting the final audio speed value by {speed}"
+                    )
+
+                # Create a unique chunk name that can be sorted alphanumerically
+                audio_hash: str = get_hash_from_data(final_audio_data.tobytes())
+                chunk_save_path: str = (
+                    base_work_dir.joinpath(
+                        f"chunk_{chunk_id:03d}_{self.session_uid}_{audio_hash}.wav"
+                    )
+                    .resolve()
+                    .as_posix()
                 )
-                self.logger.info(f"Adjusting the final audio speed value by {speed}")
 
-            # Create a unique chunk name that can be sorted alphanumerically
-            audio_hash: str = get_hash_from_data(final_audio_data.tobytes())
-            chunk_save_path: str = (
-                base_work_dir.joinpath(
-                    f"chunk_{chunk_id:03d}_{self.session_uid}_{audio_hash}.wav"
+                self.logger.info(f"Writing the converted chunk to {chunk_save_path}")
+
+                # Todo: maybe consider saving as mp3?
+                # Write the converted audio chunk to the disk so we can process them later
+                sf.write(
+                    file=chunk_save_path,
+                    # Convert float16 to int16
+                    data=convert_audio_to_int16(final_audio_data),
+                    samplerate=audio.sample_rate,
                 )
-                .resolve()
-                .as_posix()
-            )
 
-            self.logger.info(f"Writing the converted chunk to {chunk_save_path}")
+                self.processed_items += 1
 
-            # Todo: maybe consider saving as mp3?
-            # Write the converted audio chunk to the disk so we can process them later
-            sf.write(
-                file=chunk_save_path,
-                # Convert float16 to int16
-                data=convert_audio_to_int16(final_audio_data),
-                samplerate=audio.sample_rate,
-            )
+                # Clean up GPU memory for every 10 chunks
+                if (self.processed_items) % 10 == 0:
+                    self.logger.info("Emptying GPU cache")
+                    torch.cuda.empty_cache()  # If using GPU
+                    torch.cuda.reset_peak_memory_stats()
 
-            # processed_items += 1
-
-            # # Clean up GPU memory for every 10 chunks
-            # if (processed_items) % 10 == 0:
-            #     self.logger.info("Emptying GPU cache")
-            #     torch.cuda.empty_cache()  # If using GPU
-
-            return chunk_save_path
+                print_memory_summary()
+                return chunk_save_path
+            except Exception as e:
+                self.logger.warning(
+                    f"Encountered an error while processing chunk {chunk_id}: {e}"
+                )
+                return e
 
         all_reqs = [
             TTSRequest(
@@ -180,7 +229,7 @@ class AuralisTTSEngine:
 
         for chunk_output in outputs:
             if isinstance(chunk_output, Exception):
-                print(f"Found exception of {chunk_output}")
+                print(f"Found exception: {chunk_output}")
                 # Todo: implement a retry mechanism for failed processes
                 failed_chunks.append(chunk_output)
             else:
@@ -199,12 +248,41 @@ class AuralisTTSEngine:
         return processed_chunks, failed_chunks
 
     def _clean_temp_work_path(self):
+        """
+        Clean up temporary files created during the TTS process.
+
+        This function removes all temporary directories and recreates them.
+        Useful for preventing disk overflow from too many temporary files.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
         self.logger.info("Performing clean up task")
         # remove and make an empty temp folder
         shutil.rmtree(self.tmp_dir_base)
         self.tmp_dir_base.mkdir(exist_ok=True)
 
     def _combine_audio(self, chunk_paths: list[str]) -> str:
+        """
+        Combine multiple audio chunks into a single output file.
+
+        This method ensures all audio files have consistent format and sampling rate,
+        then concatenates them into one or more output files based on maximum size
+        constraints (default max size is 3.8 GB).
+
+        Parameters:
+            chunk_paths (list[str]): List of paths to individual audio chunks
+
+        Returns:
+            str: Path to the final combined audio file(s). If multiple files are created,
+                returns a list with all output paths.
+
+        Raises:
+            ValueError: If input files have inconsistent formats
+        """
         max_size_gb = 3.8
 
         max_size: float = max_size_gb * 1024**3  # Convert GB to bytes
@@ -279,8 +357,22 @@ class AuralisTTSEngine:
         self, request: TTSRequest, speed: float = 1.0, chunk_size=600
     ):
         """
-        The main text processing function that can handle text of any size and convert them into a long audio file.
-        This only converts and returns the path to the final audio file. It does not return the audio data
+        Main function for converting text to audio.
+
+        This method handles large volumes of text by breaking it into chunks,
+        processing each asynchronously, and combining the results into final
+        output files.
+
+        Parameters:
+            request (TTSRequest): Configuration parameters for TTS generation
+            speed (float, optional): Speed adjustment factor for audio (default: 1.0)
+            chunk_size (int, optional): Size of text chunks in characters (default: 600)
+
+        Returns:
+            list[str]: List of paths to the generated audio files
+
+        Raises:
+            Exception: If all processing attempts fail
         """
 
         self.log_messages: str = ""
@@ -348,9 +440,33 @@ class AuralisTTSEngine:
         top_k: float,
         repetition_penalty: float,
         language: str = "auto",
-        *args,
     ):
-        """Process text and generate audio."""
+        """
+        Main interface for converting text to audio using specified parameters.
+
+        This function validates inputs and triggers the TTS generation process.
+
+        Parameters:
+            input_text (str): Text to be converted
+            ref_audio_files (str | list[str] | bytes | list[bytes]): Reference audio files
+                for speaker voice cloning
+            speed (float): Speed multiplier for generated audio (0.5-2.0)
+            enhance_speech (bool): Flag for speech enhancement
+            temperature (float): Temperature parameter for text generation
+            top_p (float): Top-p sampling parameter
+            top_k (float): Top-k sampling parameter
+            repetition_penalty (float): Repetition penalty for text generation
+            language (str, optional): Language of the input text (default: "auto")
+
+        Returns:
+            tuple[str, str]: A tuple containing:
+                - Path to the generated audio file(s)
+                - Log messages indicating success or failure
+
+        Raises:
+            Exception: If processing fails completely
+        """
+
         request = TTSRequest(
             text=input_text,
             speaker_files=ref_audio_files,
@@ -382,6 +498,31 @@ class AuralisTTSEngine:
         repetition_penalty_file,
         language_file,
     ):
+        """
+        Process text from a file and generate audio.
+
+        This function reads text content from supported file types (.epub, .txt, .md)
+        and converts it into speech using the specified parameters.
+
+        Parameters:
+            file_input (File): Input document file
+            ref_audio_files_file (Files): Reference audio files for speaker voice cloning
+            speed_file (Slider): Speed multiplier for generated audio (0.5-2.0)
+            enhance_speech_file (bool): Flag for speech enhancement
+            temperature_file (float): Temperature parameter for text generation
+            top_p_file (float): Top-p sampling parameter
+            top_k_file (float): Top-k sampling parameter
+            repetition_penalty_file (float): Repetition penalty for text generation
+            language_file (str): Language of the input text
+
+        Returns:
+            tuple[str, str]: A tuple containing:
+                - Path to the generated audio file(s)
+                - Log messages indicating success or failure
+
+        Raises:
+            Exception: If processing fails completely
+        """
         # todo: refactor this to use the document processor object
         if file_input:
             file_extension: str = Path(file_input.name).suffix
@@ -432,6 +573,31 @@ class AuralisTTSEngine:
         repetition_penalty_mic,
         language_mic,
     ):
+        """
+        Process text from microphone input and generate audio.
+
+        This function converts spoken text into speech using the specified parameters.
+
+        Parameters:
+            input_text_mic (str): Text transcribed from microphone input
+            mic_ref_audio (tuple[int, bytes]): Audio data captured from microphone
+                (sample rate and audio bytes)
+            speed_mic (float): Speed multiplier for generated audio (0.5-2.0)
+            enhance_speech_mic (bool): Flag for speech enhancement
+            temperature_mic (float): Temperature parameter for text generation
+            top_p_mic (float): Top-p sampling parameter
+            top_k_mic (float): Top-k sampling parameter
+            repetition_penalty_mic (float): Repetition penalty for text generation
+            language_mic (str): Language of the input text
+
+        Returns:
+            tuple[str, str]: A tuple containing:
+                - Path to the generated audio file(s)
+                - Log messages indicating success or failure
+
+        Raises:
+            Exception: If processing fails completely
+        """
         if mic_ref_audio:
             data: bytes = str(time.time()).encode("utf-8")
             hash: str = hashlib.sha1(data).hexdigest()[:10]

@@ -1,6 +1,6 @@
 import gradio as gr
 from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
-
+import asyncio
 
 supported_langs: list[str] = [
     "auto",
@@ -32,8 +32,41 @@ default_values: dict[str, float] = {
 }
 
 
-async def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
+def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
     """Builds and launches the Gradio UI for Auralis."""
+
+    # def process_text_and_generate(*args):
+    #     # Create a new event loop for this thread
+    #     loop = asyncio.new_event_loop()
+    #     asyncio.set_event_loop(loop)
+    #     try:
+    #         # Run the async function in this loop
+    #         return loop.run_until_complete(tts_engine.process_text_and_generate(*args))
+    #     finally:
+    #         loop.close()
+
+    # def process_file_and_generate(*args):
+    #     # Create a new event loop for this thread
+    #     loop = asyncio.new_event_loop()
+    #     asyncio.set_event_loop(loop)
+    #     try:
+    #         # Run the async function in this loop
+    #         return loop.run_until_complete(tts_engine.process_file_and_generate(*args))
+    #     finally:
+    #         loop.close()
+
+    # def process_mic_and_generate(*args):
+    #     # Create a new event loop for this thread
+    #     loop = asyncio.new_event_loop()
+    #     tts_engine.process_file_and_generate
+    #     tts_engine.process_mic_and_generate
+    #     asyncio.set_event_loop(loop)
+    #     try:
+    #         # Run the async function in this loop
+    #         return loop.run_until_complete(tts_engine.process_mic_and_generate(*args))
+    #     finally:
+    #         loop.close()
+
     with gr.Blocks(title="GPT-TTS UI - Clone any voice", theme="soft") as ui:
         gr.Markdown(
             """
@@ -106,6 +139,8 @@ async def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
 
             generate_button.click(
                 fn=tts_engine.process_text_and_generate,
+                concurrency_limit=3,
+                max_batch_size=4,
                 inputs=[
                     input_text,
                     ref_audio_files,
@@ -181,7 +216,9 @@ async def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                     log_output_file = gr.Text(label="Log Output")
 
             generate_button_file.click(
-                tts_engine.process_file_and_generate,
+                fn=tts_engine.process_file_and_generate,
+                concurrency_limit=3,
+                max_batch_size=4,
                 inputs=[
                     file_input,
                     ref_audio_files_file,
@@ -260,6 +297,8 @@ async def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
 
             generate_button_mic.click(
                 fn=tts_engine.process_mic_and_generate,
+                concurrency_limit=3,
+                max_batch_size=4,
                 inputs=[
                     input_text_mic,
                     mic_ref_audio,

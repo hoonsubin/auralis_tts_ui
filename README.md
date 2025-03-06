@@ -14,13 +14,13 @@ This project uses uv for package management. You can technically use pip, but I 
 ```bash
 uv sync
 
-uv pip install -e .
-
 uv run app.py
 ```
 
 I've tested this on Linux (Ubuntu) and WSL2.
 You may need to install system dependencies like `make` and `gcc`, to name a few.
+I'll work on a dedicated "How to install" section with detailed dependencies.
+Just ask ChatGPT or something if you're lost.
 
 There are compatible issues with macOS (especially the M-chips) related to `triton` or `vllm`.
 You may have to build them from source or find a different workaround.

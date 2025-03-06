@@ -4,14 +4,9 @@ import os
 from pathlib import Path
 from auralis import TTSRequest
 import asyncio
+import nest_asyncio
 
-# Note: Only for debugging!
-# This (hopefully) prevents lambda pickling or illegal CUDA memory access error.
-# This forces synchronous execution. But it's VERY slow!
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-os.environ["TORCH_USE_CUDA_DSA"] = "1"
-os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "1"
+nest_asyncio.apply()
 
 
 async def process_all_local_docs():
@@ -56,7 +51,7 @@ async def process_all_local_docs():
             enhance_speech=True,
             temperature=0.6,
             top_p=0.65,
-            top_k=30,
+            top_k=20,
             repetition_penalty=4.5,
             language="auto",
         )
