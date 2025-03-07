@@ -16,6 +16,7 @@ dependencies = [
     "nest-asyncio>=1.6.0",
     "numpy>=1.26.4",
     "pdfplumber>=0.11.5",
+    "pykakasi>=2.3.0",
     "pyrubberband>=0.4.0",
     "soundfile>=0.13.1",
     "sudachidict-core>=20250129",

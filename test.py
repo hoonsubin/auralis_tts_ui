@@ -51,13 +51,13 @@ async def process_all_local_docs():
             enhance_speech=True,
             temperature=0.6,
             top_p=0.65,
-            top_k=20,
+            top_k=30,
             repetition_penalty=4.5,
             language="auto",
         )
 
         converted_audio_list = await tts_engine._generate_audio_from_text(
-            request=request, speed=1.1
+            request=request, speed=1.0
         )
 
         print(tts_engine.log_messages)

@@ -176,8 +176,6 @@ class AuralisTTSEngine:
                     .as_posix()
                 )
 
-                self.logger.info(f"Writing the converted chunk to {chunk_save_path}")
-
                 # Todo: maybe consider saving as mp3?
                 # Write the converted audio chunk to the disk so we can process them later
                 sf.write(
@@ -188,6 +186,10 @@ class AuralisTTSEngine:
                 )
 
                 self.processed_items += 1
+
+                self.logger.info(
+                    f"Processed {self.processed_items} chunks out of {len(chunks_to_process)}\nWriting the converted chunk to {chunk_save_path}"
+                )
 
                 # Clean up GPU memory for every 10 chunks
                 if (self.processed_items) % 10 == 0:
@@ -391,13 +393,13 @@ class AuralisTTSEngine:
 
         full_text = str(request.text)
 
+        print("Optimizing the input text before processing them")
         # Note: This works without issue (but we could make some improvements)
         chunks_to_process: list[str] = optimize_text_input(
             text=full_text, chunk_size=chunk_size, chunk_overlap=0
         )
         print(f"Created {len(chunks_to_process)} chunks")
 
-        # Note: This could be done in parallel, but it works in most cases without issues (albeit very slow)
         processed_chunk_paths, failed_chunks = await self._process_text_in_chunks(
             chunks_to_process=chunks_to_process, tts_req=request, speed=speed
         )

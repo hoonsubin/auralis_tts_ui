@@ -14,6 +14,8 @@ import torch
 import torchaudio
 import hashlib
 import chardet
+import pykakasi
+from itertools import groupby
 
 
 def get_hash_from_data(data: bytes | str, first_chars: int = 8) -> str:
@@ -183,8 +185,15 @@ def is_japanese(text) -> bool:
 
 
 def preprocess_japanese_text(text: str) -> str:
+    kks = pykakasi.kakasi()
+
+    kks_result = kks.convert(text)
+    hiragana_kks = ""
+    for item in kks_result:
+        hiragana_kks += item["hira"]
+
     removed_special_char = (
-        text.replace("♡", "")
+        hiragana_kks.replace("♡", "")
         .replace("♥", "")
         .replace("❤️", "")
         .replace("︎❤︎", "")
@@ -227,7 +236,10 @@ def optimize_text_input(
     This function also automatically converts Japanese Kanji into Kana for better readability.
     """
 
-    text_to_process: str = text
+    def _remove_consecutive_duplicates(text_to_fix: str):
+        return "".join(key for key, _ in groupby(text_to_fix))
+
+    text_to_process: str = _remove_consecutive_duplicates(text)
 
     # Based on Auralis TTS model
     max_bytes = 49149
