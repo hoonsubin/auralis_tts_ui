@@ -27,7 +27,6 @@ def get_hash_from_data(data: bytes | str, first_chars: int = 8) -> str:
 
 
 def print_memory_summary():
-    print(torch.cuda.memory_summary())
     print(f"Allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
     print(f"Reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
     print(f"Max allocated: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB")

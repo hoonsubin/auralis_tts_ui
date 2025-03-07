@@ -68,8 +68,13 @@ class AuralisTTSEngine:
             tts = tts.from_pretrained(
                 model_name_or_path=model_path,
                 gpt_model=gpt_model,
-                enforce_eager=False,
                 max_concurrency=3,
+                gpu_memory_utilization=0.9,
+                cpu_offload_gb=4,
+                max_seq_len_to_capture=4096,
+                block_size=32,
+                enforce_eager=False,
+                use_v2_block_manager=False,
             )
 
             logger.info(f"Successfully loaded model {model_path}")
