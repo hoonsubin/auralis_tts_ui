@@ -1,3 +1,4 @@
+from logging import Logger
 from auralis import TTS, TTSRequest, TTSOutput, setup_logger, AudioPreprocessingConfig
 from gradio import File, Files, Slider
 import numpy as np
@@ -13,7 +14,6 @@ from tts_ui.utils import (
     print_memory_summary,
 )
 import tempfile
-from tts_ui.utils.doc_processor import DocumentProcessor
 import hashlib
 import time
 from pathlib import Path
@@ -25,7 +25,7 @@ import asyncio
 
 
 class AuralisTTSEngine:
-    def __init__(self):
+    def __init__(self, max_concurrency=4):
         """
         Initialize the TTS engine with necessary configurations.
 
@@ -49,48 +49,55 @@ class AuralisTTSEngine:
         tmp_dir_base.mkdir(exist_ok=True)
         self.tmp_dir_base = tmp_dir_base
 
+        self.log_messages: str | None = None
         # Loading the TTS engine first and assign it to the class.
-        logger = setup_logger(__file__)
-
+        self.logger: Logger = setup_logger(__file__)
         tts: TTS = TTS()
+        self.tts: TTS = tts
+        self.semaphore = asyncio.Semaphore(max_concurrency)
+
+    def load_model(self, loop: asyncio.AbstractEventLoop | None = None):
+        self.tts.loop = loop  # Overloading the original event loop
         model_path = "AstraMindAI/xttsv2"  # change this if you have a different model
         gpt_model = "AstraMindAI/xtts2-gpt"
+        self.model_path: str = model_path
+        self.gpt_model: str = gpt_model
 
         try:
             cuda_available: bool = torch.cuda.is_available()
             if not cuda_available:
-                logger.warning("CUDA is not available for this platform")
+                self.logger.warning("CUDA is not available for this platform")
                 os.environ["VLLM_NO_GPU"] = "1"
                 os.environ["TRITON_CPU_ONLY"] = "1"
             else:
-                logger.info("CUDA is available for this platform")
+                self.logger.info("CUDA is available for this platform")
 
-            tts = tts.from_pretrained(
+            self.tts = self.tts.from_pretrained(
                 model_name_or_path=model_path,
                 gpt_model=gpt_model,
-                max_concurrency=3,
-                gpu_memory_utilization=0.9,
-                cpu_offload_gb=4,
-                max_seq_len_to_capture=4096,
-                block_size=32,
-                enforce_eager=False,
-                use_v2_block_manager=False,
+                # max_concurrency=3,
+                # gpu_memory_utilization=0.9,
+                # cpu_offload_gb=4,
+                # max_seq_len_to_capture=4096,
+                # block_size=32,
+                # enforce_eager=False,
+                # use_v2_block_manager=False,
             )
 
-            logger.info(f"Successfully loaded model {model_path}")
+            self.logger.info(f"Successfully loaded model {model_path}")
+
+            return self
         except Exception as e:
             error_msg = f"Failed to load model: {e}."
-            logger.error(error_msg)
+            self.logger.error(error_msg)
             raise Exception(error_msg)
 
-        self.logger = logger
-        self.tts: TTS = tts
-        self.model_path: str = model_path
-        self.gpt_model: str = gpt_model
+    async def restart_engine(self):
+        self.logger.warning("Restarting the engine")
+        await self.tts.shutdown()
+        gc.collect()
 
-        self.log_messages: str | None = None
-
-        self.doc_processor = DocumentProcessor()
+        self.load_model(asyncio.get_running_loop())
 
     def _create_new_session_ui(self) -> str:
         """
@@ -150,21 +157,23 @@ class AuralisTTSEngine:
 
         self.processed_items: int = 0
 
-        async def _process_and_save_chunk(req: TTSRequest, chunk_id: int) -> str:
+        async def _process_and_save_chunk(req: TTSRequest, chunk_id: int) -> str | dict:
             try:
-                audio: TTSOutput = await self.tts.generate_speech_async(req)
-                final_audio_data: np.ndarray = audio.array
+                async with self.semaphore:
+                    audio: TTSOutput = await self.tts.generate_speech_async(req)
+                    # Todo: Add an option to add random pauses between chunks to make the output sound more realistic
+                    final_audio_data: np.ndarray = audio.array
 
-                # Might be slower to process her chunk, but better than having to load gb of combined audio at once
-                if speed != 1:
-                    final_audio_data = torchaudio_stretch(
-                        audio_data=audio.array,
-                        sample_rate=audio.sample_rate,
-                        speed_factor=speed,
-                    )
-                    self.logger.info(
-                        f"Adjusting the final audio speed value by {speed}"
-                    )
+                    # Might be slower to process her chunk, but better than having to load gb of combined audio at once
+                    if speed != 1:
+                        final_audio_data = torchaudio_stretch(
+                            audio_data=audio.array,
+                            sample_rate=audio.sample_rate,
+                            speed_factor=speed,
+                        )
+                        self.logger.info(
+                            f"Adjusting the final audio speed value by {speed}"
+                        )
 
                 # Create a unique chunk name that can be sorted alphanumerically
                 audio_hash: str = get_hash_from_data(final_audio_data.tobytes())
@@ -203,7 +212,7 @@ class AuralisTTSEngine:
                 self.logger.warning(
                     f"Encountered an error while processing chunk {chunk_id}: {e}"
                 )
-                return e
+                return {"error": e, "index": chunk_id}
 
         all_reqs = [
             TTSRequest(
@@ -222,7 +231,8 @@ class AuralisTTSEngine:
         ]
 
         coroutines = [
-            _process_and_save_chunk(req, idx) for idx, req in enumerate(all_reqs)
+            asyncio.create_task(_process_and_save_chunk(req, idx))
+            for idx, req in enumerate(all_reqs)
         ]
         outputs = await asyncio.gather(*coroutines, return_exceptions=True)
         self.logger.info(
@@ -230,17 +240,23 @@ class AuralisTTSEngine:
         )
 
         # failed text chunks
-        failed_chunks: list[Exception] = []
+        failed_chunks: list[TTSRequest] = []
         # successful audio chunks
         processed_chunks: list[str] = []
 
         for chunk_output in outputs:
-            if isinstance(chunk_output, Exception):
-                print(f"Found exception: {chunk_output}")
-                # Todo: implement a retry mechanism for failed processes
-                failed_chunks.append(chunk_output)
+            if not isinstance(chunk_output, str):
+                print(f"Found exception: {chunk_output['error']}")
+                # We can use the self.restart_engine() function and only restart the chunks that failed
+                failed_chunks.append(all_reqs[chunk_output["index"]])
             else:
                 processed_chunks.append(chunk_output)
+
+        # Todo: make a loop-based retry mechanism that will restart the engine and process the failed chunks based on their id
+        if failed_chunks:
+            # Todo: implement the `max_retry` error handling logic
+            self.logger.warning(f"Found {len(failed_chunks)} failed chunks")
+            await self.restart_engine()
 
         if torch.cuda.is_available():
             self.logger.info("Emptying GPU cache")
@@ -391,39 +407,40 @@ class AuralisTTSEngine:
 
         print(f"Using sample voice from {request.speaker_files}")
 
-        full_text = str(request.text)
-
-        print("Optimizing the input text before processing them")
-        # Note: This works without issue (but we could make some improvements)
-        chunks_to_process: list[str] = optimize_text_input(
-            text=full_text, chunk_size=chunk_size, chunk_overlap=0
-        )
-        print(f"Created {len(chunks_to_process)} chunks")
-
-        processed_chunk_paths, failed_chunks = await self._process_text_in_chunks(
-            chunks_to_process=chunks_to_process, tts_req=request, speed=speed
-        )
-
-        if failed_chunks:
-            self.log_messages = (
-                f"⚠️ Completed with {len(failed_chunks)} failed chunks "
-                f"({len(processed_chunk_paths)} succeeded)\n"
-            )
-        else:
-            self.logger.info(f"Converted {len(processed_chunk_paths)} chunks to audio")
-
         # Combine the saved audio chunks into one using pydub (good for WAV files)
         try:
-            # Note: This mostly works, but audio format becomes an important factor. We can improve this
-            # Note: .wav files cannot be larger than 4gb. Probably good to just make this into a mp3
-            combined_audio_path = (
-                self._combine_audio(processed_chunk_paths)
-                if len(processed_chunk_paths)
-                > 1  # Only process if there are more than one audio chunks
-                else processed_chunk_paths
+            full_text = str(request.text)
+
+            print("Optimizing the input text before processing them")
+            # todo: this takes too long for large texts. We should cache the converted text locally
+            chunks_to_process: list[str] = optimize_text_input(
+                text=full_text, chunk_size=chunk_size, chunk_overlap=0
             )
-            self.log_messages += "✅ Successfully Generated audio\n"
-            # self.logger.info(self.log_messages)
+            print(f"Created {len(chunks_to_process)} chunks")
+
+            processed_chunk_paths, failed_chunks = await self._process_text_in_chunks(
+                chunks_to_process=chunks_to_process, tts_req=request, speed=speed
+            )
+
+            if failed_chunks:
+                self.log_messages = (
+                    f"⚠️ Completed with {len(failed_chunks)} failed chunks "
+                    f"({len(processed_chunk_paths)} succeeded)\n"
+                )
+            else:
+                self.logger.info(
+                    f"Converted {len(processed_chunk_paths)} chunks to audio"
+                )
+                # Note: This mostly works, but audio format becomes an important factor. We can improve this
+                # Note: .wav files cannot be larger than 4gb. Probably good to just make this into a mp3
+                combined_audio_path = (
+                    self._combine_audio(processed_chunk_paths)
+                    if len(processed_chunk_paths)
+                    > 1  # Only process if there are more than one audio chunks
+                    else processed_chunk_paths
+                )
+                self.log_messages += "✅ Successfully Generated audio\n"
+                # self.logger.info(self.log_messages)
 
         except Exception as e:
             self.log_messages += f"❌ Failed to write chunks: {e}"
@@ -447,7 +464,7 @@ class AuralisTTSEngine:
         top_k: float,
         repetition_penalty: float,
         language: str = "auto",
-    ):
+    ) -> tuple[str, str]:
         """
         Main interface for converting text to audio using specified parameters.
 
@@ -486,12 +503,16 @@ class AuralisTTSEngine:
             language=language,
         )
 
-        converted_audio_list = await self._generate_audio_from_text(request, speed)
+        try:
+            converted_audio_list = await self._generate_audio_from_text(request, speed)
 
-        self.logger.info(self.log_messages)
+            self.logger.info(self.log_messages)
 
-        # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
-        return converted_audio_list[0], self.log_messages
+            # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
+            return converted_audio_list[0], self.log_messages
+        except Exception as e:
+            self.logger.error(f"Error saving audio file: {e}")
+            return None, f"Error saving audio file: {e}"
 
     async def process_file_and_generate(
         self,
@@ -504,7 +525,7 @@ class AuralisTTSEngine:
         top_k_file,
         repetition_penalty_file,
         language_file,
-    ):
+    ) -> tuple[str, str]:
         """
         Process text from a file and generate audio.
 
@@ -541,7 +562,7 @@ class AuralisTTSEngine:
                     input_text = text_from_file(file_input.name)
                 case _:
                     return (
-                        [],
+                        None,
                         "Unsupported file format, it needs to be either .epub or .txt",
                     )
 
@@ -566,7 +587,7 @@ class AuralisTTSEngine:
             # Todo: Refactor the Gradio UI code to allow multiple audio outputs. Right now, we only return the first result
             return converted_audio_list[0], self.log_messages
         else:
-            return [], "No document file was provided!"
+            return None, "No document file was provided!"
 
     async def process_mic_and_generate(
         self,
@@ -579,7 +600,7 @@ class AuralisTTSEngine:
         top_k_mic,
         repetition_penalty_mic,
         language_mic,
-    ):
+    ) -> tuple[str, str]:
         """
         Process text from microphone input and generate audio.
 
@@ -639,6 +660,6 @@ class AuralisTTSEngine:
 
             except Exception as e:
                 self.logger.error(f"Error saving audio file: {e}")
-                return [], f"Error saving audio file: {e}"
+                return None, f"Error saving audio file: {e}"
         else:
-            return [], "Please record an audio!"
+            return None, "Please record an audio!"

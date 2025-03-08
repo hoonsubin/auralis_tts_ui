@@ -1,6 +1,5 @@
 import gradio as gr
 from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
-import asyncio
 
 supported_langs: list[str] = [
     "auto",
@@ -32,7 +31,7 @@ default_values: dict[str, float] = {
 }
 
 
-def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
+def build_gradio_ui() -> gr.Blocks:
     """Builds and launches the Gradio UI for Auralis."""
 
     with gr.Blocks(title="GPT-TTS UI - Clone any voice", theme="soft") as ui:
@@ -45,6 +44,17 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
           Powered by Auralis 🌌 made by Hoon
           """
         )
+
+        tts_engine: AuralisTTSEngine = AuralisTTSEngine().load_model()
+
+        async def _handle_tts_text_input(*args):
+            return await tts_engine.process_text_and_generate(*args)
+
+        async def _handle_tts_file_input(*args):
+            return await tts_engine.process_file_and_generate(*args)
+
+        async def _handle_tts_mic_input(*args):
+            return await tts_engine.process_mic_and_generate(*args)
 
         with gr.Tab("Text to Speech"):
             with gr.Row():
@@ -106,7 +116,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                     log_output = gr.Text(label="Log Output")
 
             generate_button.click(
-                fn=tts_engine.process_text_and_generate,
+                fn=_handle_tts_text_input,
                 concurrency_limit=3,
                 max_batch_size=4,
                 inputs=[
@@ -184,7 +194,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                     log_output_file = gr.Text(label="Log Output")
 
             generate_button_file.click(
-                fn=tts_engine.process_file_and_generate,
+                fn=_handle_tts_file_input,
                 concurrency_limit=3,
                 max_batch_size=4,
                 inputs=[
@@ -264,7 +274,7 @@ def build_gradio_ui(tts_engine: AuralisTTSEngine) -> gr.Blocks:
                     log_output_mic = gr.Text(label="Log Output")
 
             generate_button_mic.click(
-                fn=tts_engine.process_mic_and_generate,
+                fn=_handle_tts_mic_input,
                 concurrency_limit=3,
                 max_batch_size=4,
                 inputs=[

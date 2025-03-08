@@ -13,7 +13,7 @@ nest_asyncio.apply()
 async def process_all_local_docs():
     from tts_ui.tts.auralis_tts_engine import AuralisTTSEngine
 
-    tts_engine = AuralisTTSEngine()
+    tts_engine = AuralisTTSEngine().load_model()
 
     base_path = Path("./data/")
     audio_save_path = base_path.joinpath("output/").resolve()

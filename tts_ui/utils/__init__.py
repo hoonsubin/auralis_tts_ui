@@ -193,15 +193,7 @@ def preprocess_japanese_text(text: str) -> str:
         hiragana_kks += item["hira"]
 
     removed_special_char = (
-        hiragana_kks.replace("♡", "")
-        .replace("♥", "")
-        .replace("❤️", "")
-        .replace("︎❤︎", "")
-        .replace("゛", "")
-        .replace("\n─", "")
-        .replace("―", "")
-        .replace("─", "")
-        .replace("」", " ")
+        hiragana_kks.replace("」", " ")
         .replace("「", " ")
         .replace("【", " ")
         .replace("】", " ")
@@ -229,7 +221,7 @@ def convert_audio_to_int16(data: np.ndarray) -> np.ndarray:
 
 
 def optimize_text_input(
-    text: str, chunk_size: int = 608, chunk_overlap: int = 5
+    text: str, chunk_size: int = 2000, chunk_overlap: int = 10
 ) -> list[str]:
     """
     Split text into chunks respecting byte limits and natural boundaries.
@@ -240,6 +232,7 @@ def optimize_text_input(
         return "".join(key for key, _ in groupby(text_to_fix))
 
     text_to_process: str = _remove_consecutive_duplicates(text)
+    # text_to_process = text
 
     # Based on Auralis TTS model
     max_bytes = 49149
@@ -271,11 +264,10 @@ def optimize_text_input(
     optimized_list: list[str] = []
 
     if len(text_to_process) > chunk_size:
-        # todo: optimize this function so it stores batches locally in the temp folder instead of loading everything in memory
-        # todo: implement a tokenized context batch size manager using https://huggingface.co/AstraMindAI/xtts2-gpt/blob/main/tokenizer.py
+        # todo: refactor this to use multiprocessing instead
         langchain_splitter = RecursiveCharacterTextSplitter(
             separators=text_separators,
-            chunk_size=chunk_size,  # Optimized for TTS context windows
+            chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             length_function=len,
             is_separator_regex=False,
